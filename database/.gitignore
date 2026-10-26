@@ -1,0 +1,18 @@
+# Archivos del sistema operativo
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Configuración de editores (VS Code / JetBrains)
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Archivos de entorno y bitácoras de errores (por seguridad y limpieza)
+.env
+*.log
