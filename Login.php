@@ -19,7 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_SESSION['nombre'] = $usuario['nombre'];
                 $_SESSION['rol'] = $usuario['rol'];
 
-                header("Location: index.php");
+                // Redirigir al dashboard administrativo correcto
+                header("Location: dashboard_admin.php");
                 exit;
             } else {
                 $error = "Usuario o contraseña incorrectos.";
@@ -38,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BiblioTec - Iniciar Sesión</title>
+    <title>BiblioTec - Iniciar Sesión (Personal)</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -66,13 +67,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .btn:hover { background-color: var(--primary-dark); }
 
         .error-alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.85rem; background-color: #fee2e2; color: #991b1b; text-align: center; }
+        
+        .back-link { display: block; text-align: center; margin-top: 20px; font-size: 0.85rem; color: var(--text-muted); text-decoration: none; }
+        .back-link:hover { color: var(--primary); }
     </style>
 </head>
 <body>
 
     <div class="login-card">
         <h2>BiblioTec</h2>
-        <p>Sistema de Gestión Bibliotecaria</p>
+        <p>Acceso para Personal y Administración</p>
 
         <?php if (!empty($error)): ?>
             <div class="error-alert"><?php echo htmlspecialchars($error); ?></div>
@@ -89,6 +93,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <button type="submit" class="btn">Ingresar al Sistema</button>
         </form>
+
+        <a href="index.php" class="back-link">← Volver al inicio</a>
     </div>
 
 </body>

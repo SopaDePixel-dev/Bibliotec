@@ -54,8 +54,7 @@ try {
 
         main { flex: 1; display: flex; flex-direction: column; }
 
-        header { background-color: #1d4ed8; color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        header .materia { font-size: 0.9rem; font-weight: 600; letter-spacing: 0.5px; }
+        header { background-color: #1d4ed8; color: white; padding: 15px 30px; display: flex; justify-content: flex-end; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         header .user-info { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
         header .user-badge { background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 20px; }
         
@@ -83,20 +82,23 @@ try {
         <h2>BiblioTec</h2>
         <p>Sistema de Biblioteca</p>
         <nav>
-            <a href="index.php" class="active">🏠 Principal</a>
+            <!-- Corregido para que "Principal" se quede en el dashboard de admin -->
+            <a href="dashboard_admin.php" class="active">🏠 Principal</a>
             <a href="prestamos.php">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
             <a href="estudiantes.php">🎓 Estudiantes</a>
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php">🏷️ Categorías</a>
-            <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php endif; ?>
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>
 
     <main>
         <header>
-            <span class="materia">TÓPICOS AVANZADOS DE PROGRAMACIÓN</span>
+            <!-- Se eliminó por completo el texto de la materia -->
             <div class="user-info">
                 <span class="user-badge">
                     Sesión: <strong><?php echo htmlspecialchars($_SESSION['nombre']); ?></strong> 
