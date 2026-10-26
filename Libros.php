@@ -1,4 +1,10 @@
 <?php
+session_start();
+if (!isset($_SESSION['id_usuario'])) {
+    header("Location: login.php");
+    exit;
+}
+
 include 'conexion.php';
 
 $mensaje = "";
@@ -89,8 +95,12 @@ $busqueda = trim($_GET['busqueda'] ?? '');
 $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
 
 if (!empty($busqueda)) {
-    $stmt = $pdo->prepare("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LEFT JOIN categoria c ON l.id_categoria = c.id_categoria WHERE l.titulo LIKE :b OR l.editorial LIKE :b OR l.isbn LIKE :b ORDER BY l.id_libro DESC");
-    $stmt->execute([':b' => "%$busqueda%"]);
+    $stmt = $pdo->prepare("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LEFT JOIN categoria c ON l.id_categoria = c.id_categoria WHERE l.titulo LIKE :b1 OR l.editorial LIKE :b2 OR l.isbn LIKE :b3 ORDER BY l.id_libro DESC");
+    $stmt->execute([
+        ':b1' => "%$busqueda%",
+        ':b2' => "%$busqueda%",
+        ':b3' => "%$busqueda%"
+    ]);
     $libros = $stmt->fetchAll();
 } else {
     $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LEFT JOIN categoria c ON l.id_categoria = c.id_categoria ORDER BY l.id_libro DESC")->fetchAll();
@@ -167,12 +177,18 @@ if (!empty($busqueda)) {
             <a href="dashboard_admin.php">🏠 Principal</a>
             <a href="prestamos.php">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
-            <a href="estudiantes.php">🎓 Estudiantes</a>
+            
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="estudiantes.php">🎓 Estudiantes</a>
+            <?php endif; ?>
+
             <a href="libros.php" class="active">📖 Libros</a>
             <a href="categorias.php">🏷️ Categorías</a>
+
             <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
                 <a href="usuarios.php">👤 Usuarios (Admin)</a>
             <?php endif; ?>
+
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>

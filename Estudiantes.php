@@ -1,4 +1,11 @@
 <?php
+session_start();
+
+if (!isset($_SESSION['id_usuario']) || $_SESSION['rol'] !== 'ADMIN') {
+    header("Location: dashboard_admin.php");
+    exit;
+}
+
 include 'conexion.php';
 
 $mensaje = "";
@@ -13,7 +20,7 @@ $est_edit = [
     'contrasena' => ''
 ];
 
-// --- 1. ELIMINAR ESTUDIANTE ---
+
 if (isset($_GET['eliminar'])) {
     $nc = $_GET['eliminar'];
     try {
@@ -26,7 +33,6 @@ if (isset($_GET['eliminar'])) {
     }
 }
 
-// --- 2. CARGAR DATOS PARA EDITAR ---
 if (isset($_GET['editar'])) {
     $nc = $_GET['editar'];
     $stmt = $pdo->prepare("SELECT * FROM estudiante WHERE numeroControl = :nc");
@@ -38,8 +44,8 @@ if (isset($_GET['editar'])) {
     }
 }
 
-// --- 3. GUARDAR (CREAR O ACTUALIZAR) ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'guardar') {
     $numeroControl   = trim($_POST['numeroControl']);
     $nombre          = trim($_POST['nombre']);
     $apellidoPaterno = trim($_POST['apellidoPaterno']);
@@ -52,7 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($numeroControl) && !empty($nombre) && !empty($carrera)) {
         try {
             if ($es_actualizacion) {
-                // Actualizar (Update)
                 if (!empty($contrasena)) {
                     $passHash = password_hash($contrasena, PASSWORD_DEFAULT);
                     $sql = "UPDATE estudiante SET nombre = :nom, apellidoPaterno = :app, apellidoMaterno = :apm, carrera = :car, estatus = :est, contrasena = :pass WHERE numeroControl = :nc";
@@ -65,7 +70,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $mensaje = "¡Estudiante actualizado con éxito!";
             } else {
-                // Insertar (Create)
                 $passHash = !empty($contrasena) ? password_hash($contrasena, PASSWORD_DEFAULT) : password_hash('123456', PASSWORD_DEFAULT);
                 $sql = "INSERT INTO estudiante (numeroControl, nombre, apellidoPaterno, apellidoMaterno, carrera, estatus, contrasena) 
                         VALUES (:nc, :nom, :app, :apm, :car, :est, :pass)";
@@ -81,7 +85,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $mensaje = "¡Estudiante registrado con éxito!";
             }
-            // Limpiar formulario tras guardar
             $editando = false;
             $est_edit = ['numeroControl' => '', 'nombre' => '', 'apellidoPaterno' => '', 'apellidoMaterno' => '', 'carrera' => '', 'estatus' => 'ACTIVO', 'contrasena' => ''];
         } catch (PDOException $e) {
@@ -92,7 +95,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
+
+$busqueda = trim($_GET['busqueda'] ?? '');
+if (!empty($busqueda)) {
+    $stmt = $pdo->prepare("SELECT * FROM estudiante WHERE numeroControl LIKE :b1 OR nombre LIKE :b2 OR apellidoPaterno LIKE :b3 OR carrera LIKE :b4 ORDER BY numeroControl DESC");
+    $stmt->execute([
+        ':b1' => "%$busqueda%",
+        ':b2' => "%$busqueda%",
+        ':b3' => "%$busqueda%",
+        ':b4' => "%$busqueda%"
+    ]);
+    $estudiantes = $stmt->fetchAll();
+} else {
+    $estudiantes = $pdo->query("SELECT * FROM estudiante ORDER BY numeroControl DESC")->fetchAll();
+}
 ?>
 
 <!DOCTYPE html>
@@ -137,6 +153,13 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
         .btn-cancel { background-color: #64748b; margin-left: 10px; text-decoration: none; display: inline-block; padding: 10px 20px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.9rem; }
         .btn-cancel:hover { background-color: #475569; }
 
+        .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        .search-bar input { flex: 1; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; }
+        .btn-search { background-color: #0284c7; color: white; padding: 10px 18px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-search:hover { background-color: #0369a1; }
+        .btn-clear { background-color: #64748b; color: white; padding: 10px 18px; border-radius: 6px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-clear:hover { background-color: #475569; }
+
         .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; background-color: #d1fae5; color: #065f46; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; background: var(--card-bg); border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); }
@@ -146,9 +169,7 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
 
         .action-link { text-decoration: none; font-weight: 600; font-size: 0.85rem; margin-right: 10px; }
         .edit-link { color: #0284c7; }
-        .edit-link:hover { text-decoration: underline; }
         .delete-link { color: #dc2626; }
-        .delete-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -157,19 +178,28 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
         <h2>BiblioTec</h2>
         <p>Sistema de Biblioteca</p>
         <nav>
-            <a href="index.php">🏠 Principal</a>
+            <a href="dashboard_admin.php">🏠 Principal</a>
             <a href="prestamos.php">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
-            <a href="estudiantes.php" class="active">🎓 Estudiantes</a>
+            
+            <!-- Estudiantes y Usuarios exclusivos para ADMIN -->
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="estudiantes.php" class="active">🎓 Estudiantes</a>
+            <?php endif; ?>
+
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php">🏷️ Categorías</a>
-            <a href="usuarios.php">👤 Usuarios (Admin)</a>
+
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php endif; ?>
+
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>
 
     <main>
-        <h1>Gestión de Estudiantes (CRUD Completo)</h1>
+        <h1>Gestión de Estudiantes</h1>
 
         <?php if (!empty($mensaje)): ?>
             <div class="alert"><?php echo htmlspecialchars($mensaje); ?></div>
@@ -178,6 +208,7 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
         <div class="card">
             <h3><?php echo $editando ? 'Editar Estudiante' : 'Registrar Nuevo Estudiante'; ?></h3>
             <form action="estudiantes.php" method="POST">
+                <input type="hidden" name="accion" value="guardar">
                 <input type="hidden" name="es_actualizacion" value="<?php echo $editando ? '1' : '0'; ?>">
                 <div class="form-grid">
                     <div class="form-group">
@@ -223,6 +254,17 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
             <div style="padding: 20px; border-bottom: 1px solid var(--border-color);">
                 <h3>Lista de Estudiantes Registrados</h3>
             </div>
+
+            <div style="padding: 20px 20px 0 20px;">
+                <form action="estudiantes.php" method="GET" class="search-bar">
+                    <input type="text" name="busqueda" placeholder="Buscar por no. control, nombre o carrera..." value="<?php echo htmlspecialchars($busqueda); ?>">
+                    <button type="submit" class="btn-search">🔍 Buscar</button>
+                    <?php if (!empty($busqueda)): ?>
+                        <a href="estudiantes.php" class="btn-clear">❌ Limpiar</a>
+                    <?php endif; ?>
+                </form>
+            </div>
+
             <table>
                 <thead>
                     <tr>
@@ -250,7 +292,7 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
                     <?php else: ?>
                         <tr>
                             <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                                No hay estudiantes registrados todavía.
+                                No se encontraron estudiantes con ese criterio.
                             </td>
                         </tr>
                     <?php endif; ?>

@@ -1,13 +1,31 @@
 <?php
+session_start();
+if (!isset($_SESSION['id_usuario'])) {
+    header("Location: login.php");
+    exit;
+}
+
 include 'conexion.php';
 
-$totalEstudiantes = $pdo->query("SELECT COUNT(*) FROM estudiante")->fetchColumn();
-$totalLibros = $pdo->query("SELECT COUNT(*) FROM libros")->fetchColumn();
-$totalPrestamos = $pdo->query("SELECT COUNT(*) FROM prestamo")->fetchColumn();
-$prestamosActivos = $pdo->query("SELECT COUNT(*) FROM prestamo WHERE estado = 'Activo'")->fetchColumn();
-$totalDevoluciones = $pdo->query("SELECT COUNT(*) FROM devolucion")->fetchColumn();
+// Obtener estadísticas y métricas generales
+try {
+    $totalEstudiantes = $pdo->query("SELECT COUNT(*) FROM estudiante")->fetchColumn();
+    $totalLibros = $pdo->query("SELECT COUNT(*) FROM libros")->fetchColumn();
+    $prestamosHistoricos = $pdo->query("SELECT COUNT(*) FROM prestamo")->fetchColumn();
+    $prestamosActivos = $pdo->query("SELECT COUNT(*) FROM prestamo WHERE estado = 'Activo'")->fetchColumn();
+    $totalDevoluciones = $pdo->query("SELECT COUNT(*) FROM devolucion")->fetchColumn();
 
-$reportePrestamos = $pdo->query("SELECT p.id_prestamo, e.numeroControl, CONCAT(e.nombre, ' ', e.apellidoPaterno) AS estudiante, l.titulo AS libro, p.fechaPrestamo, p.fechaDevolucion, p.estado FROM prestamo p JOIN estudiante e ON p.numeroControl = e.numeroControl JOIN libros l ON p.id_libro = l.id_libro")->fetchAll();
+    // Obtener el reporte general de préstamos con datos de estudiantes y libros
+    $stmtReporte = $pdo->query("SELECT p.*, e.numeroControl, e.nombre, e.apellidoPaterno, l.titulo FROM prestamo p JOIN estudiante e ON p.numeroControl = e.numeroControl JOIN libros l ON p.id_libro = l.id_libro ORDER BY p.id_prestamo DESC");
+    $reportePrestamos = $stmtReporte->fetchAll();
+} catch (PDOException $e) {
+    $totalEstudiantes = 0;
+    $totalLibros = 0;
+    $prestamosHistoricos = 0;
+    $prestamosActivos = 0;
+    $totalDevoluciones = 0;
+    $reportePrestamos = [];
+}
 ?>
 
 <!DOCTYPE html>
@@ -42,20 +60,55 @@ $reportePrestamos = $pdo->query("SELECT p.id_prestamo, e.numeroControl, CONCAT(e
 
         .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 30px; }
         .metric-card { background: var(--card-bg); padding: 20px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .metric-card h3 { font-size: 1.8rem; font-weight: 700; color: var(--primary); margin-bottom: 5px; }
+        .metric-card h3 { font-size: 2rem; font-weight: 700; color: var(--primary); margin-bottom: 5px; }
         .metric-card p { font-size: 0.85rem; color: var(--text-muted); font-weight: 500; }
 
-        .card { background: var(--card-bg); border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px; overflow: hidden; }
-        .card-header { padding: 20px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .card { background: var(--card-bg); padding: 25px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px; }
+        
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .card-header h3 { font-size: 1.1rem; color: var(--primary); }
 
-        .btn-print { background-color: var(--primary); color: white; padding: 8px 14px; border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; text-decoration: none; }
-        .btn-print:hover { background-color: var(--primary-dark); }
+        .btn-print { background-color: #1e40af; color: white; padding: 8px 16px; border: none; border-radius: 6px; font-weight: 600; font-size: 0.85rem; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; transition: background 0.2s; }
+        .btn-print:hover { background-color: #1e3a8a; }
 
-        table { width: 100%; border-collapse: collapse; text-align: left; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; background: var(--card-bg); border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); }
         th, td { padding: 12px 16px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
         th { background-color: #f8fafc; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); }
         tr:hover td { background-color: #f8fafc; }
+
+        /* Estilos optimizados para impresión sin cortes */
+        @media print {
+            aside, .metrics-grid, .btn-print, header { display: none !important; }
+            body, html { 
+                background: white !important; 
+                color: black !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            main { 
+                padding: 0 !important; 
+                margin: 0 !important;
+                width: 100% !important;
+                display: block !important;
+            }
+            .card { 
+                border: none !important; 
+                box-shadow: none !important; 
+                padding: 0 !important; 
+                width: 100% !important;
+                margin: 0 !important;
+            }
+            table {
+                width: 100% !important;
+                border-collapse: collapse !important;
+            }
+            th, td {
+                border: 1px solid #cbd5e1 !important;
+                padding: 8px !important;
+                font-size: 10pt !important;
+            }
+        }
     </style>
 </head>
 <body>
@@ -64,13 +117,21 @@ $reportePrestamos = $pdo->query("SELECT p.id_prestamo, e.numeroControl, CONCAT(e
         <h2>BiblioTec</h2>
         <p>Sistema de Biblioteca</p>
         <nav>
-            <a href="index.php">🏠 Principal</a>
+            <a href="dashboard_admin.php">🏠 Principal</a>
             <a href="prestamos.php">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
-            <a href="estudiantes.php">🎓 Estudiantes</a>
+            
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="estudiantes.php">🎓 Estudiantes</a>
+            <?php endif; ?>
+
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php">🏷️ Categorías</a>
-            <a href="usuarios.php">👤 Usuarios (Admin)</a>
+
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php endif; ?>
+
             <a href="reportes.php" class="active">📊 Reportes</a>
         </nav>
     </aside>
@@ -78,6 +139,7 @@ $reportePrestamos = $pdo->query("SELECT p.id_prestamo, e.numeroControl, CONCAT(e
     <main>
         <h1>Reportes y Estadísticas Generales</h1>
 
+        <!-- Métricas Principales -->
         <div class="metrics-grid">
             <div class="metric-card">
                 <h3><?php echo $totalEstudiantes; ?></h3>
@@ -88,7 +150,7 @@ $reportePrestamos = $pdo->query("SELECT p.id_prestamo, e.numeroControl, CONCAT(e
                 <p>Total Libros</p>
             </div>
             <div class="metric-card">
-                <h3><?php echo $totalPrestamos; ?></h3>
+                <h3><?php echo $prestamosHistoricos; ?></h3>
                 <p>Préstamos Históricos</p>
             </div>
             <div class="metric-card">
@@ -101,11 +163,13 @@ $reportePrestamos = $pdo->query("SELECT p.id_prestamo, e.numeroControl, CONCAT(e
             </div>
         </div>
 
-        <div class="card">
+        <!-- Tabla de Reporte General -->
+        <div class="card" style="padding: 25px;">
             <div class="card-header">
                 <h3>Reporte General de Préstamos y Estados</h3>
-                <button onclick="window.print();" class="btn-print">🖨️ Imprimir Reporte</button>
+                <button onclick="window.print()" class="btn-print">🖨️ Imprimir Reporte</button>
             </div>
+
             <table>
                 <thead>
                     <tr>
@@ -124,8 +188,8 @@ $reportePrestamos = $pdo->query("SELECT p.id_prestamo, e.numeroControl, CONCAT(e
                             <tr>
                                 <td><strong>#<?php echo htmlspecialchars($rep['id_prestamo']); ?></strong></td>
                                 <td><?php echo htmlspecialchars($rep['numeroControl']); ?></td>
-                                <td><?php echo htmlspecialchars($rep['estudiante']); ?></td>
-                                <td><?php echo htmlspecialchars($rep['libro']); ?></td>
+                                <td><?php echo htmlspecialchars($rep['nombre'] . ' ' . $rep['apellidoPaterno']); ?></td>
+                                <td><?php echo htmlspecialchars($rep['titulo']); ?></td>
                                 <td><?php echo htmlspecialchars($rep['fechaPrestamo']); ?></td>
                                 <td><?php echo htmlspecialchars($rep['fechaDevolucion']); ?></td>
                                 <td>
@@ -138,7 +202,7 @@ $reportePrestamos = $pdo->query("SELECT p.id_prestamo, e.numeroControl, CONCAT(e
                     <?php else: ?>
                         <tr>
                             <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                                No hay registros para generar el reporte.
+                                No hay registros de préstamos disponibles para generar el reporte.
                             </td>
                         </tr>
                     <?php endif; ?>

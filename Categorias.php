@@ -1,4 +1,10 @@
 <?php
+session_start();
+if (!isset($_SESSION['id_usuario'])) {
+    header("Location: login.php");
+    exit;
+}
+
 include 'conexion.php';
 
 $mensaje = "";
@@ -9,7 +15,6 @@ $cat_edit = [
     'descripcion' => ''
 ];
 
-// --- 1. ELIMINAR CATEGORÍA ---
 if (isset($_GET['eliminar'])) {
     $id = intval($_GET['eliminar']);
     try {
@@ -22,7 +27,6 @@ if (isset($_GET['eliminar'])) {
     }
 }
 
-// --- 2. CARGAR DATOS PARA EDITAR ---
 if (isset($_GET['editar'])) {
     $id = intval($_GET['editar']);
     $stmt = $pdo->prepare("SELECT * FROM categoria WHERE id_categoria = :id");
@@ -34,7 +38,6 @@ if (isset($_GET['editar'])) {
     }
 }
 
-// --- 3. GUARDAR (CREAR O ACTUALIZAR) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id_categoria     = intval($_POST['id_categoria'] ?? 0);
     $nombre           = trim($_POST['nombre']);
@@ -44,7 +47,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($nombre)) {
         try {
             if ($es_actualizacion && $id_categoria > 0) {
-                // Actualizar (Update)
                 $sql = "UPDATE categoria SET nombre = :nombre, descripcion = :descripcion WHERE id_categoria = :id";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([
@@ -54,7 +56,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $mensaje = "¡Categoría actualizada con éxito!";
             } else {
-                // Insertar (Create)
                 $sql = "INSERT INTO categoria (nombre, descripcion) VALUES (:nombre, :descripcion)";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([
@@ -73,7 +74,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
+
+$busqueda = trim($_GET['busqueda'] ?? '');
+if (!empty($busqueda)) {
+    $stmt = $pdo->prepare("SELECT * FROM categoria WHERE nombre LIKE :b1 OR descripcion LIKE :b2 ORDER BY id_categoria DESC");
+    $stmt->execute([
+        ':b1' => "%$busqueda%",
+        ':b2' => "%$busqueda%"
+    ]);
+    $categorias = $stmt->fetchAll();
+} else {
+    $categorias = $pdo->query("SELECT * FROM categoria ORDER BY id_categoria DESC")->fetchAll();
+}
 ?>
 
 <!DOCTYPE html>
@@ -119,6 +131,13 @@ $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
         .btn-cancel { background-color: #64748b; margin-left: 10px; text-decoration: none; display: inline-block; padding: 10px 20px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.9rem; }
         .btn-cancel:hover { background-color: #475569; }
 
+        .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        .search-bar input { flex: 1; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; }
+        .btn-search { background-color: #0284c7; color: white; padding: 10px 18px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-search:hover { background-color: #0369a1; }
+        .btn-clear { background-color: #64748b; color: white; padding: 10px 18px; border-radius: 6px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-clear:hover { background-color: #475569; }
+
         .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; background-color: #d1fae5; color: #065f46; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; background: var(--card-bg); border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); }
@@ -128,9 +147,7 @@ $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
 
         .action-link { text-decoration: none; font-weight: 600; font-size: 0.85rem; margin-right: 10px; }
         .edit-link { color: #0284c7; }
-        .edit-link:hover { text-decoration: underline; }
         .delete-link { color: #dc2626; }
-        .delete-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -139,21 +156,27 @@ $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
         <h2>BiblioTec</h2>
         <p>Sistema de Biblioteca</p>
         <nav>
-            <a href="index.php">🏠 Principal</a>
+            <a href="dashboard_admin.php">🏠 Principal</a>
             <a href="prestamos.php">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
-            <a href="estudiantes.php">🎓 Estudiantes</a>
+            
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="estudiantes.php">🎓 Estudiantes</a>
+            <?php endif; ?>
+
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php" class="active">🏷️ Categorías</a>
+
             <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
                 <a href="usuarios.php">👤 Usuarios (Admin)</a>
             <?php endif; ?>
+
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>
 
     <main>
-        <h1>Gestión de Categorías (CRUD Completo)</h1>
+        <h1>Gestión de Categorías</h1>
 
         <?php if (!empty($mensaje)): ?>
             <div class="alert"><?php echo htmlspecialchars($mensaje); ?></div>
@@ -183,6 +206,17 @@ $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
             <div style="padding: 20px; border-bottom: 1px solid var(--border-color);">
                 <h3>Categorías Existentes</h3>
             </div>
+
+            <div style="padding: 20px 20px 0 20px;">
+                <form action="categorias.php" method="GET" class="search-bar">
+                    <input type="text" name="busqueda" placeholder="Buscar por nombre o descripción..." value="<?php echo htmlspecialchars($busqueda); ?>">
+                    <button type="submit" class="btn-search">🔍 Buscar</button>
+                    <?php if (!empty($busqueda)): ?>
+                        <a href="categorias.php" class="btn-clear">❌ Limpiar</a>
+                    <?php endif; ?>
+                </form>
+            </div>
+
             <table>
                 <thead>
                     <tr>
@@ -208,7 +242,7 @@ $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
                     <?php else: ?>
                         <tr>
                             <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                                No hay categorías registradas todavía.
+                                No se encontraron categorías con ese criterio.
                             </td>
                         </tr>
                     <?php endif; ?>

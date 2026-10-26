@@ -135,12 +135,18 @@ if (!empty($busqueda)) {
             <a href="dashboard_admin.php">🏠 Principal</a>
             <a href="prestamos.php" class="active">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
-            <a href="estudiantes.php">🎓 Estudiantes</a>
+            
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="estudiantes.php">🎓 Estudiantes</a>
+            <?php endif; ?>
+
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php">🏷️ Categorías</a>
+
             <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
                 <a href="usuarios.php">👤 Usuarios (Admin)</a>
             <?php endif; ?>
+
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>

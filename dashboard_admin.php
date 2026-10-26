@@ -82,23 +82,27 @@ try {
         <h2>BiblioTec</h2>
         <p>Sistema de Biblioteca</p>
         <nav>
-            <!-- Corregido para que "Principal" se quede en el dashboard de admin -->
             <a href="dashboard_admin.php" class="active">🏠 Principal</a>
             <a href="prestamos.php">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
-            <a href="estudiantes.php">🎓 Estudiantes</a>
+            
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="estudiantes.php">🎓 Estudiantes</a>
+            <?php endif; ?>
+
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php">🏷️ Categorías</a>
+
             <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
                 <a href="usuarios.php">👤 Usuarios (Admin)</a>
             <?php endif; ?>
+
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>
 
     <main>
         <header>
-            <!-- Se eliminó por completo el texto de la materia -->
             <div class="user-info">
                 <span class="user-badge">
                     Sesión: <strong><?php echo htmlspecialchars($_SESSION['nombre']); ?></strong> 
@@ -143,7 +147,9 @@ try {
                 <div class="btn-group">
                     <a href="prestamos.php" class="btn">+ Ir a Préstamos</a>
                     <a href="devoluciones.php" class="btn">+ Ir a Devoluciones</a>
-                    <a href="estudiantes.php" class="btn">+ Registrar Estudiante</a>
+                    <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                        <a href="estudiantes.php" class="btn">+ Registrar Estudiante</a>
+                    <?php endif; ?>
                     <a href="libros.php" class="btn">+ Registrar Libro</a>
                 </div>
             </div>
