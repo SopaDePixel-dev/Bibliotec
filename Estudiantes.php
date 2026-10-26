@@ -17,7 +17,8 @@ $est_edit = [
     'apellidoMaterno' => '',
     'carrera' => '',
     'estatus' => 'ACTIVO',
-    'contrasena' => ''
+    'contrasena' => '',
+    'correo' => ''
 ];
 
 
@@ -51,28 +52,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
     $apellidoPaterno = trim($_POST['apellidoPaterno']);
     $apellidoMaterno = trim($_POST['apellidoMaterno']);
     $carrera         = trim($_POST['carrera']);
+    $correo          = trim($_POST['correo'] ?? '');
     $estatus         = $_POST['estatus'];
     $es_actualizacion = $_POST['es_actualizacion'] === '1';
     $contrasena      = trim($_POST['contrasena']);
+   
 
     if (!empty($numeroControl) && !empty($nombre) && !empty($carrera)) {
         try {
             if ($es_actualizacion) {
                 if (!empty($contrasena)) {
                     $passHash = password_hash($contrasena, PASSWORD_DEFAULT);
-                    $sql = "UPDATE estudiante SET nombre = :nom, apellidoPaterno = :app, apellidoMaterno = :apm, carrera = :car, estatus = :est, contrasena = :pass WHERE numeroControl = :nc";
+                    $sql = "UPDATE estudiante SET nombre = :nom, apellidoPaterno = :app, apellidoMaterno = :apm, carrera = :car, estatus = :est, contrasena = :pass, correo = :correo WHERE numeroControl = :nc";
                     $stmt = $pdo->prepare($sql);
-                    $stmt->execute([':nom' => $nombre, ':app' => $apellidoPaterno, ':apm' => $apellidoMaterno, ':car' => $carrera, ':est' => $estatus, ':pass' => $passHash, ':nc' => $numeroControl]);
+                    $stmt->execute([':nom' => $nombre, ':app' => $apellidoPaterno, ':apm' => $apellidoMaterno, ':car' => $carrera, ':est' => $estatus, ':pass' => $passHash, ':correo' => $correo, ':nc' => $numeroControl]);
                 } else {
-                    $sql = "UPDATE estudiante SET nombre = :nom, apellidoPaterno = :app, apellidoMaterno = :apm, carrera = :car, estatus = :est WHERE numeroControl = :nc";
+                    $sql = "UPDATE estudiante SET nombre = :nom, apellidoPaterno = :app, apellidoMaterno = :apm, carrera = :car, estatus = :est, correo = :correo WHERE numeroControl = :nc";
                     $stmt = $pdo->prepare($sql);
-                    $stmt->execute([':nom' => $nombre, ':app' => $apellidoPaterno, ':apm' => $apellidoMaterno, ':car' => $carrera, ':est' => $estatus, ':nc' => $numeroControl]);
+                    $stmt->execute([':nom' => $nombre, ':app' => $apellidoPaterno, ':apm' => $apellidoMaterno, ':car' => $carrera, ':est' => $estatus, ':correo' => $correo, ':nc' => $numeroControl]);
                 }
                 $mensaje = "¡Estudiante actualizado con éxito!";
             } else {
                 $passHash = !empty($contrasena) ? password_hash($contrasena, PASSWORD_DEFAULT) : password_hash('123456', PASSWORD_DEFAULT);
-                $sql = "INSERT INTO estudiante (numeroControl, nombre, apellidoPaterno, apellidoMaterno, carrera, estatus, contrasena) 
-                        VALUES (:nc, :nom, :app, :apm, :car, :est, :pass)";
+                $sql = "INSERT INTO estudiante (numeroControl, nombre, apellidoPaterno, apellidoMaterno, carrera, estatus, contrasena, correo) 
+                        VALUES (:nc, :nom, :app, :apm, :car, :est, :pass, :correo)";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([
                     ':nc'   => $numeroControl,
@@ -81,12 +84,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['
                     ':apm'  => $apellidoMaterno,
                     ':car'  => $carrera,
                     ':est'  => $estatus,
-                    ':pass' => $passHash
+                    ':pass' => $passHash,
+                    ':correo' => $correo
                 ]);
                 $mensaje = "¡Estudiante registrado con éxito!";
             }
             $editando = false;
-            $est_edit = ['numeroControl' => '', 'nombre' => '', 'apellidoPaterno' => '', 'apellidoMaterno' => '', 'carrera' => '', 'estatus' => 'ACTIVO', 'contrasena' => ''];
+            $est_edit = ['numeroControl' => '', 'nombre' => '', 'apellidoPaterno' => '', 'apellidoMaterno' => '', 'carrera' => '', 'estatus' => 'ACTIVO', 'contrasena' => '', 'correo' => ''];
         } catch (PDOException $e) {
             $mensaje = "Error: El número de control ya está registrado.";
         }
@@ -182,7 +186,6 @@ if (!empty($busqueda)) {
             <a href="prestamos.php">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
             
-            <!-- Estudiantes y Usuarios exclusivos para ADMIN -->
             <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
                 <a href="estudiantes.php" class="active">🎓 Estudiantes</a>
             <?php endif; ?>
@@ -229,7 +232,20 @@ if (!empty($busqueda)) {
                     </div>
                     <div class="form-group">
                         <label>Carrera:</label>
-                        <input type="text" name="carrera" required placeholder="Ej. Ing. en Sistemas" value="<?php echo htmlspecialchars($est_edit['carrera']); ?>">
+                        <select name="carrera" required>
+                            <option value="">Selecciona una carrera</option>
+                            <option value="Ingeniería en Sistemas Computacionales" <?php echo ($est_edit['carrera'] === 'Ingeniería en Sistemas Computacionales') ? 'selected' : ''; ?>>Ingeniería en Sistemas Computacionales</option>
+                            <option value="Ingeniería Mecatrónica" <?php echo ($est_edit['carrera'] === 'Ingeniería Mecatrónica') ? 'selected' : ''; ?>>Ingeniería Mecatrónica</option>
+                            <option value="Ingeniería Industrial" <?php echo ($est_edit['carrera'] === 'Ingeniería Industrial') ? 'selected' : ''; ?>>Ingeniería Industrial</option>
+                            <option value="Ingeniería Civil" <?php echo ($est_edit['carrera'] === 'Ingeniería Civil') ? 'selected' : ''; ?>>Ingeniería Civil</option>
+                            <option value="Ingeniería Electrónica" <?php echo ($est_edit['carrera'] === 'Ingeniería Electrónica') ? 'selected' : ''; ?>>Ingeniería Electrónica</option>
+                            <option value="Ingeniería Bioquímica" <?php echo ($est_edit['carrera'] === 'Ingeniería Bioquímica') ? 'selected' : ''; ?>>Ingeniería Bioquímica</option>
+                            <option value="Ingeniería Ambiental" <?php echo ($est_edit['carrera'] === 'Ingeniería Ambiental') ? 'selected' : ''; ?>>Ingeniería Ambiental</option>
+                            <option value="Ingeniería en Industrias Alimentarias" <?php echo ($est_edit['carrera'] === 'Ingeniería en Industrias Alimentarias') ? 'selected' : ''; ?>>Ingeniería en Industrias Alimentarias</option>
+                            <option value="Ingeniería en Gestión Empresarial" <?php echo ($est_edit['carrera'] === 'Ingeniería en Gestión Empresarial') ? 'selected' : ''; ?>>Ingeniería en Gestión Empresarial</option>
+                            <option value="Licenciatura en Administración" <?php echo ($est_edit['carrera'] === 'Licenciatura en Administración') ? 'selected' : ''; ?>>Licenciatura en Administración</option>
+                            <option value="Contaduría Pública" <?php echo ($est_edit['carrera'] === 'Contaduría Pública') ? 'selected' : ''; ?>>Contaduría Pública</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label>Estatus:</label>
@@ -241,6 +257,10 @@ if (!empty($busqueda)) {
                     <div class="form-group">
                         <label>Contraseña / NIP:</label>
                         <input type="password" name="contrasena" placeholder="<?php echo $editando ? 'Dejar en blanco para no cambiar' : '********'; ?>">
+                    </div>
+                    <div class="form-group">
+                        <label>Correo Electrónico:</label>
+                        <input type="email" name="correo" required placeholder="correo@ejemplo.com" value="<?php echo htmlspecialchars($est_edit['correo'] ?? ''); ?>">
                     </div>
                 </div>
                 <button type="submit" class="btn"><?php echo $editando ? 'Actualizar Estudiante' : 'Guardar Estudiante'; ?></button>
