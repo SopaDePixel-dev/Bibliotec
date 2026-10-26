@@ -1,4 +1,12 @@
 <?php
+session_start();
+
+// Validar que haya sesión y que estrictamente sea ADMIN
+if (!isset($_SESSION['id_usuario']) || $_SESSION['rol'] !== 'ADMIN') {
+    header("Location: index.php");
+    exit;
+}
+
 include 'conexion.php';
 
 $mensaje = "";
@@ -94,7 +102,9 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
             <a href="estudiantes.php">🎓 Estudiantes</a>
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php">🏷️ Categorías</a>
-            <a href="usuarios.php" class="active">👤 Usuarios (Admin)</a>
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="usuarios.php" class="active">👤 Usuarios (Admin)</a>
+            <?php endif; ?>
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>
