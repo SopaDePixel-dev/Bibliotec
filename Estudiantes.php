@@ -2,31 +2,90 @@
 include 'conexion.php';
 
 $mensaje = "";
+$editando = false;
+$est_edit = [
+    'numeroControl' => '',
+    'nombre' => '',
+    'apellidoPaterno' => '',
+    'apellidoMaterno' => '',
+    'carrera' => '',
+    'estatus' => 'ACTIVO',
+    'contrasena' => ''
+];
 
+// --- 1. ELIMINAR ESTUDIANTE ---
+if (isset($_GET['eliminar'])) {
+    $nc = $_GET['eliminar'];
+    try {
+        $stmt = $pdo->prepare("DELETE FROM estudiante WHERE numeroControl = :nc");
+        $stmt->execute([':nc' => $nc]);
+        header("Location: estudiantes.php");
+        exit;
+    } catch (PDOException $e) {
+        $mensaje = "Error: No se puede eliminar el estudiante porque tiene préstamos o registros asociados.";
+    }
+}
+
+// --- 2. CARGAR DATOS PARA EDITAR ---
+if (isset($_GET['editar'])) {
+    $nc = $_GET['editar'];
+    $stmt = $pdo->prepare("SELECT * FROM estudiante WHERE numeroControl = :nc");
+    $stmt->execute([':nc' => $nc]);
+    $resultado = $stmt->fetch();
+    if ($resultado) {
+        $editando = true;
+        $est_edit = $resultado;
+    }
+}
+
+// --- 3. GUARDAR (CREAR O ACTUALIZAR) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $numeroControl = trim($_POST['numeroControl']);
-    $nombre        = trim($_POST['nombre']);
-    $apellidoP     = trim($_POST['apellidoPaterno']);
-    $apellidoM     = trim($_POST['apellidoMaterno']);
-    $carrera       = $_POST['carrera'];
-    $estatus       = $_POST['estatus'];
+    $numeroControl   = trim($_POST['numeroControl']);
+    $nombre          = trim($_POST['nombre']);
+    $apellidoPaterno = trim($_POST['apellidoPaterno']);
+    $apellidoMaterno = trim($_POST['apellidoMaterno']);
+    $carrera         = trim($_POST['carrera']);
+    $estatus         = $_POST['estatus'];
+    $es_actualizacion = $_POST['es_actualizacion'] === '1';
+    $contrasena      = trim($_POST['contrasena']);
 
-    if (!empty($numeroControl) && !empty($nombre) && !empty($apellidoP) && !empty($carrera)) {
+    if (!empty($numeroControl) && !empty($nombre) && !empty($carrera)) {
         try {
-            $sql = "INSERT INTO estudiante (numeroControl, nombre, apellidoPaterno, apellidoMaterno, carrera, estatus) 
-                    VALUES (:nc, :nom, :app, :apm, :car, :est)";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
-                ':nc'  => $numeroControl,
-                ':nom' => $nombre,
-                ':app' => $apellidoP,
-                ':apm' => $apellidoM,
-                ':car' => $carrera,
-                ':est' => $estatus
-            ]);
-            $mensaje = "¡Estudiante registrado con éxito!";
+            if ($es_actualizacion) {
+                // Actualizar (Update)
+                if (!empty($contrasena)) {
+                    $passHash = password_hash($contrasena, PASSWORD_DEFAULT);
+                    $sql = "UPDATE estudiante SET nombre = :nom, apellidoPaterno = :app, apellidoMaterno = :apm, carrera = :car, estatus = :est, contrasena = :pass WHERE numeroControl = :nc";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute([':nom' => $nombre, ':app' => $apellidoPaterno, ':apm' => $apellidoMaterno, ':car' => $carrera, ':est' => $estatus, ':pass' => $passHash, ':nc' => $numeroControl]);
+                } else {
+                    $sql = "UPDATE estudiante SET nombre = :nom, apellidoPaterno = :app, apellidoMaterno = :apm, carrera = :car, estatus = :est WHERE numeroControl = :nc";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute([':nom' => $nombre, ':app' => $apellidoPaterno, ':apm' => $apellidoMaterno, ':car' => $carrera, ':est' => $estatus, ':nc' => $numeroControl]);
+                }
+                $mensaje = "¡Estudiante actualizado con éxito!";
+            } else {
+                // Insertar (Create)
+                $passHash = !empty($contrasena) ? password_hash($contrasena, PASSWORD_DEFAULT) : password_hash('123456', PASSWORD_DEFAULT);
+                $sql = "INSERT INTO estudiante (numeroControl, nombre, apellidoPaterno, apellidoMaterno, carrera, estatus, contrasena) 
+                        VALUES (:nc, :nom, :app, :apm, :car, :est, :pass)";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([
+                    ':nc'   => $numeroControl,
+                    ':nom'  => $nombre,
+                    ':app'  => $apellidoPaterno,
+                    ':apm'  => $apellidoMaterno,
+                    ':car'  => $carrera,
+                    ':est'  => $estatus,
+                    ':pass' => $passHash
+                ]);
+                $mensaje = "¡Estudiante registrado con éxito!";
+            }
+            // Limpiar formulario tras guardar
+            $editando = false;
+            $est_edit = ['numeroControl' => '', 'nombre' => '', 'apellidoPaterno' => '', 'apellidoMaterno' => '', 'carrera' => '', 'estatus' => 'ACTIVO', 'contrasena' => ''];
         } catch (PDOException $e) {
-            $mensaje = "Error: El número de control ya existe o hubo un problema en la BD.";
+            $mensaje = "Error: El número de control ya está registrado.";
         }
     } else {
         $mensaje = "Por favor, completa los campos obligatorios.";
@@ -75,6 +134,8 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
 
         .btn { background-color: var(--primary); color: white; padding: 10px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
         .btn:hover { background-color: var(--primary-dark); }
+        .btn-cancel { background-color: #64748b; margin-left: 10px; text-decoration: none; display: inline-block; padding: 10px 20px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.9rem; }
+        .btn-cancel:hover { background-color: #475569; }
 
         .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; background-color: #d1fae5; color: #065f46; }
 
@@ -82,6 +143,12 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
         th, td { padding: 12px 16px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
         th { background-color: #f8fafc; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); }
         tr:hover td { background-color: #f8fafc; }
+
+        .action-link { text-decoration: none; font-weight: 600; font-size: 0.85rem; margin-right: 10px; }
+        .edit-link { color: #0284c7; }
+        .edit-link:hover { text-decoration: underline; }
+        .delete-link { color: #dc2626; }
+        .delete-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -102,58 +169,59 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
     </aside>
 
     <main>
-        <h1>Gestión de Estudiantes</h1>
+        <h1>Gestión de Estudiantes (CRUD Completo)</h1>
 
         <?php if (!empty($mensaje)): ?>
             <div class="alert"><?php echo htmlspecialchars($mensaje); ?></div>
         <?php endif; ?>
 
         <div class="card">
-            <h3>Registrar Nuevo Estudiante</h3>
+            <h3><?php echo $editando ? 'Editar Estudiante' : 'Registrar Nuevo Estudiante'; ?></h3>
             <form action="estudiantes.php" method="POST">
+                <input type="hidden" name="es_actualizacion" value="<?php echo $editando ? '1' : '0'; ?>">
                 <div class="form-grid">
                     <div class="form-group">
-                        <label>No. Control (9 caracteres):</label>
-                        <input type="text" name="numeroControl" maxlength="9" required placeholder="Ej. 210200123">
+                        <label>No. de Control (9 caracteres):</label>
+                        <input type="text" name="numeroControl" maxlength="9" required placeholder="Ej. 210200123" value="<?php echo htmlspecialchars($est_edit['numeroControl']); ?>" <?php echo $editando ? 'readonly style="background-color: #e2e8f0;"' : ''; ?>>
                     </div>
                     <div class="form-group">
-                        <label>Nombre(s):</label>
-                        <input type="text" name="nombre" required placeholder="Nombre del alumno">
+                        <label>Nombre:</label>
+                        <input type="text" name="nombre" required placeholder="Nombre" value="<?php echo htmlspecialchars($est_edit['nombre']); ?>">
                     </div>
                     <div class="form-group">
                         <label>Apellido Paterno:</label>
-                        <input type="text" name="apellidoPaterno" required placeholder="Apellido paterno">
+                        <input type="text" name="apellidoPaterno" required placeholder="Apellido Paterno" value="<?php echo htmlspecialchars($est_edit['apellidoPaterno']); ?>">
                     </div>
                     <div class="form-group">
                         <label>Apellido Materno:</label>
-                        <input type="text" name="apellidoMaterno" placeholder="Apellido materno">
+                        <input type="text" name="apellidoMaterno" placeholder="Apellido Materno" value="<?php echo htmlspecialchars($est_edit['apellidoMaterno']); ?>">
                     </div>
                     <div class="form-group">
                         <label>Carrera:</label>
-                        <select name="carrera" required>
-                            <option value="">Selecciona una carrera</option>
-                            <option value="Sistemas">Ing. en Sistemas Computacionales</option>
-                            <option value="Industrial">Ing. Industrial</option>
-                            <option value="Gestion">Ing. en Gestión Empresarial</option>
-                            <option value="Mecatronica">Ing. Mecatrónica</option>
-                        </select>
+                        <input type="text" name="carrera" required placeholder="Ej. Ing. en Sistemas" value="<?php echo htmlspecialchars($est_edit['carrera']); ?>">
                     </div>
                     <div class="form-group">
                         <label>Estatus:</label>
-                        <select name="estatus">
-                            <option value="ACTIVO">Activo</option>
-                            <option value="INACTIVO">Inactivo</option>
-                            <option value="EGRESADO">Egresado</option>
+                        <select name="estatus" required>
+                            <option value="ACTIVO" <?php echo ($est_edit['estatus'] === 'ACTIVO') ? 'selected' : ''; ?>>ACTIVO</option>
+                            <option value="BAJA" <?php echo ($est_edit['estatus'] === 'BAJA') ? 'selected' : ''; ?>>BAJA</option>
                         </select>
                     </div>
+                    <div class="form-group">
+                        <label>Contraseña / NIP:</label>
+                        <input type="password" name="contrasena" placeholder="<?php echo $editando ? 'Dejar en blanco para no cambiar' : '********'; ?>">
+                    </div>
                 </div>
-                <button type="submit" class="btn">Guardar Estudiante</button>
+                <button type="submit" class="btn"><?php echo $editando ? 'Actualizar Estudiante' : 'Guardar Estudiante'; ?></button>
+                <?php if ($editando): ?>
+                    <a href="estudiantes.php" class="btn-cancel">Cancelar</a>
+                <?php endif; ?>
             </form>
         </div>
 
         <div class="card" style="padding: 0; overflow: hidden;">
             <div style="padding: 20px; border-bottom: 1px solid var(--border-color);">
-                <h3>Estudiantes Registrados en el Sistema</h3>
+                <h3>Lista de Estudiantes Registrados</h3>
             </div>
             <table>
                 <thead>
@@ -162,6 +230,7 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
                         <th>Nombre Completo</th>
                         <th>Carrera</th>
                         <th>Estatus</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -172,11 +241,15 @@ $estudiantes = $pdo->query("SELECT * FROM estudiante")->fetchAll();
                                 <td><?php echo htmlspecialchars($est['nombre'] . ' ' . $est['apellidoPaterno'] . ' ' . $est['apellidoMaterno']); ?></td>
                                 <td><?php echo htmlspecialchars($est['carrera']); ?></td>
                                 <td><span style="background: #e0f2fe; color: #0369a1; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;"><?php echo htmlspecialchars($est['estatus']); ?></span></td>
+                                <td>
+                                    <a href="estudiantes.php?editar=<?php echo urlencode($est['numeroControl']); ?>" class="action-link edit-link">✏️ Editar</a>
+                                    <a href="estudiantes.php?eliminar=<?php echo urlencode($est['numeroControl']); ?>" class="action-link delete-link" onclick="return confirm('¿Estás seguro de eliminar a este estudiante?');">🗑️ Eliminar</a>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">
                                 No hay estudiantes registrados todavía.
                             </td>
                         </tr>
