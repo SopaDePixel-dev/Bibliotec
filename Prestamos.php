@@ -1,15 +1,23 @@
 <?php
-include 'conexion.php';
+session_start();
+if (!isset($_SESSION['id_usuario'])) {
+    header("Location: login.php");
+    exit;
+}
 
+include 'conexion.php';
 $mensaje = "";
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Registrar Préstamo
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'registrar') {
     $numeroControl = trim($_POST['numeroControl']);
     $id_libro      = intval($_POST['id_libro']);
 
     if (!empty($numeroControl) && $id_libro > 0) {
         try {
-            $stmtLibro = $pdo->prepare("SELECT stock FROM libros WHERE id_libro = :id");
+            $pdo->beginTransaction();
+
+            $stmtLibro = $pdo->prepare("SELECT stock FROM libros WHERE id_libro = :id FOR UPDATE");
             $stmtLibro->execute([':id' => $id_libro]);
             $libro = $stmtLibro->fetch();
 
@@ -17,38 +25,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $fechaPrestamo = date('Y-m-d H:i:s');
                 $fechaDevolucion = date('Y-m-d H:i:s', strtotime('+3 days'));
 
-                $sql = "INSERT INTO prestamo (numeroControl, id_libro, fechaPrestamo, fechaDevolucion, estado) 
-                        VALUES (:nc, :id_libro, :f_pres, :f_dev, 'Activo')";
-                $stmt = $pdo->prepare($sql);
-                $stmt->execute([
-                    ':nc'       => $numeroControl,
+                $stmtPrestamo = $pdo->prepare("INSERT INTO prestamo (numeroControl, id_libro, fechaPrestamo, fechaDevolucion, estado) VALUES (:nc, :id_libro, :f_pres, :f_dev, 'Activo')");
+                $stmtPrestamo->execute([
+                    ':nc'     => $numeroControl,
                     ':id_libro' => $id_libro,
                     ':f_pres'   => $fechaPrestamo,
                     ':f_dev'    => $fechaDevolucion
                 ]);
 
-                $stmtUpdate = $pdo->prepare("UPDATE libros SET stock = stock - 1 WHERE id_libro = :id");
-                $stmtUpdate->execute([':id' => $id_libro]);
+                $stmtStock = $pdo->prepare("UPDATE libros SET stock = stock - 1 WHERE id_libro = :id");
+                $stmtStock->execute([':id' => $id_libro]);
 
+                $pdo->commit();
                 $mensaje = "¡Préstamo registrado con éxito!";
             } else {
-                $mensaje = "Error: El libro seleccionado no tiene ejemplares disponibles.";
+                $pdo->rollBack();
+                $mensaje = "Error: No hay stock disponible de este libro.";
             }
-        } catch (PDOException $e) {
-            $mensaje = "Error al procesar el préstamo.";
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            $mensaje = "Error en el sistema al registrar el préstamo.";
         }
     } else {
-        $mensaje = "Por favor, selecciona un estudiante y un libro.";
+        $mensaje = "Selecciona un estudiante y un libro válido.";
     }
 }
 
 $estudiantes = $pdo->query("SELECT numeroControl, nombre, apellidoPaterno FROM estudiante WHERE estatus = 'ACTIVO'")->fetchAll();
-$libros = $pdo->query("SELECT id_libro, titulo, stock FROM libros WHERE stock > 0")->fetchAll();
+$librosDisponibles = $pdo->query("SELECT * FROM libros WHERE stock > 0")->fetchAll();
 
-$prestamos = $pdo->query("SELECT p.*, e.nombre AS est_nombre, e.apellidoPaterno AS est_app, l.titulo AS libro_titulo 
-                          FROM prestamo p 
-                          JOIN estudiante e ON p.numeroControl = e.numeroControl 
-                          JOIN libros l ON p.id_libro = l.id_libro")->fetchAll();
+// --- BÚSQUEDA DINÁMICA CON PARÁMETROS ÚNICOS ---
+$busqueda = trim($_GET['busqueda'] ?? '');
+if (!empty($busqueda)) {
+    $stmt = $pdo->prepare("SELECT p.*, e.nombre, e.apellidoPaterno, l.titulo FROM prestamo p JOIN estudiante e ON p.numeroControl = e.numeroControl JOIN libros l ON p.id_libro = l.id_libro WHERE e.nombre LIKE :b1 OR e.apellidoPaterno LIKE :b2 OR p.numeroControl LIKE :b3 OR l.titulo LIKE :b4 OR p.estado LIKE :b5 ORDER BY p.id_prestamo DESC");
+    $stmt->execute([
+        ':b1' => "%$busqueda%",
+        ':b2' => "%$busqueda%",
+        ':b3' => "%$busqueda%",
+        ':b4' => "%$busqueda%",
+        ':b5' => "%$busqueda%"
+    ]);
+    $prestamos = $stmt->fetchAll();
+} else {
+    $prestamos = $pdo->query("SELECT p.*, e.nombre, e.apellidoPaterno, l.titulo FROM prestamo p JOIN estudiante e ON p.numeroControl = e.numeroControl JOIN libros l ON p.id_libro = l.id_libro ORDER BY p.id_prestamo DESC")->fetchAll();
+}
 ?>
 
 <!DOCTYPE html>
@@ -91,6 +111,13 @@ $prestamos = $pdo->query("SELECT p.*, e.nombre AS est_nombre, e.apellidoPaterno 
         .btn { background-color: var(--primary); color: white; padding: 10px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
         .btn:hover { background-color: var(--primary-dark); }
 
+        .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        .search-bar input { flex: 1; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; }
+        .btn-search { background-color: #0284c7; color: white; padding: 10px 18px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-search:hover { background-color: #0369a1; }
+        .btn-clear { background-color: #64748b; color: white; padding: 10px 18px; border-radius: 6px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-clear:hover { background-color: #475569; }
+
         .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; background-color: #d1fae5; color: #065f46; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; background: var(--card-bg); border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); }
@@ -105,13 +132,15 @@ $prestamos = $pdo->query("SELECT p.*, e.nombre AS est_nombre, e.apellidoPaterno 
         <h2>BiblioTec</h2>
         <p>Sistema de Biblioteca</p>
         <nav>
-            <a href="index.php">🏠 Principal</a>
+            <a href="dashboard_admin.php">🏠 Principal</a>
             <a href="prestamos.php" class="active">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
             <a href="estudiantes.php">🎓 Estudiantes</a>
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php">🏷️ Categorías</a>
-            <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php endif; ?>
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>
@@ -126,6 +155,7 @@ $prestamos = $pdo->query("SELECT p.*, e.nombre AS est_nombre, e.apellidoPaterno 
         <div class="card">
             <h3>Registrar Nuevo Préstamo</h3>
             <form action="prestamos.php" method="POST">
+                <input type="hidden" name="accion" value="registrar">
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Estudiante:</label>
@@ -142,7 +172,7 @@ $prestamos = $pdo->query("SELECT p.*, e.nombre AS est_nombre, e.apellidoPaterno 
                         <label>Libro:</label>
                         <select name="id_libro" required>
                             <option value="">Selecciona un libro disponible</option>
-                            <?php foreach ($libros as $lib): ?>
+                            <?php foreach ($librosDisponibles as $lib): ?>
                                 <option value="<?php echo $lib['id_libro']; ?>">
                                     <?php echo htmlspecialchars($lib['titulo'] . ' (Disponibles: ' . $lib['stock'] . ')'); ?>
                                 </option>
@@ -156,8 +186,19 @@ $prestamos = $pdo->query("SELECT p.*, e.nombre AS est_nombre, e.apellidoPaterno 
 
         <div class="card" style="padding: 0; overflow: hidden;">
             <div style="padding: 20px; border-bottom: 1px solid var(--border-color);">
-                <h3>Préstamos Activos</h3>
+                <h3>Historial y Préstamos Registrados</h3>
             </div>
+
+            <div style="padding: 20px 20px 0 20px;">
+                <form action="prestamos.php" method="GET" class="search-bar">
+                    <input type="text" name="busqueda" placeholder="Buscar por estudiante, libro o estado..." value="<?php echo htmlspecialchars($busqueda); ?>">
+                    <button type="submit" class="btn-search">🔍 Buscar</button>
+                    <?php if (!empty($busqueda)): ?>
+                        <a href="prestamos.php" class="btn-clear">❌ Limpiar</a>
+                    <?php endif; ?>
+                </form>
+            </div>
+
             <table>
                 <thead>
                     <tr>
@@ -165,26 +206,26 @@ $prestamos = $pdo->query("SELECT p.*, e.nombre AS est_nombre, e.apellidoPaterno 
                         <th>Estudiante</th>
                         <th>Libro</th>
                         <th>Fecha Salida</th>
-                        <th>Fecha Límite (3 días)</th>
+                        <th>Fecha Límite (3 Días)</th>
                         <th>Estado</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (!empty($prestamos)): ?>
-                        <?php foreach ($prestamos as $pres): ?>
+                        <?php foreach ($prestamos as $p): ?>
                             <tr>
-                                <td><strong>#<?php echo htmlspecialchars($pres['id_prestamo']); ?></strong></td>
-                                <td><?php echo htmlspecialchars($pres['est_nombre'] . ' ' . $pres['est_app']); ?></td>
-                                <td><?php echo htmlspecialchars($pres['libro_titulo']); ?></td>
-                                <td><?php echo htmlspecialchars($pres['fechaPrestamo']); ?></td>
-                                <td><?php echo htmlspecialchars($pres['fechaDevolucion']); ?></td>
-                                <td><span style="background: #e0f2fe; color: #0369a1; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;"><?php echo htmlspecialchars($pres['estado']); ?></span></td>
+                                <td><strong>#<?php echo htmlspecialchars($p['id_prestamo']); ?></strong></td>
+                                <td><?php echo htmlspecialchars($p['nombre'] . ' ' . $p['apellidoPaterno']); ?></td>
+                                <td><?php echo htmlspecialchars($p['titulo']); ?></td>
+                                <td><?php echo htmlspecialchars($p['fechaPrestamo']); ?></td>
+                                <td><?php echo htmlspecialchars($p['fechaDevolucion']); ?></td>
+                                <td><span style="background: #e0f2fe; color: #0369a1; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;"><?php echo htmlspecialchars($p['estado']); ?></span></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
                             <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                                No hay préstamos registrados todavía.
+                                No se encontraron registros de préstamos con ese criterio.
                             </td>
                         </tr>
                     <?php endif; ?>

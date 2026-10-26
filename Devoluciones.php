@@ -1,62 +1,76 @@
 <?php
-include 'conexion.php';
+session_start();
+if (!isset($_SESSION['id_usuario'])) {
+    header("Location: login.php");
+    exit;
+}
 
+include 'conexion.php';
 $mensaje = "";
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $id_prestamo   = intval($_POST['id_prestamo']);
-    $condicion     = $_POST['condicion'];
+// Registrar Devolución
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'devolver') {
+    $id_prestamo = intval($_POST['id_prestamo']);
+    $condicion   = trim($_POST['condicion']);
     $observaciones = trim($_POST['observaciones']);
 
-    if ($id_prestamo > 0) {
+    if ($id_prestamo > 0 && !empty($condicion)) {
         try {
-            $stmtPres = $pdo->prepare("SELECT id_libro, estado FROM prestamo WHERE id_prestamo = :id");
-            $stmtPres->execute([':id' => $id_prestamo]);
-            $prestamo = $stmtPres->fetch();
+            $pdo->beginTransaction();
 
-            if ($prestamo && $prestamo['estado'] === 'Activo') {
-                $pdo->beginTransaction();
+            $stmtP = $pdo->prepare("SELECT * FROM prestamo WHERE id_prestamo = :id AND estado = 'Activo' FOR UPDATE");
+            $stmtP->execute([':id' => $id_prestamo]);
+            $prestamo = $stmtP->fetch();
 
-                $sqlDev = "INSERT INTO devolucion (id_prestamo, fechaDevolucion, condicion, observaciones) 
-                           VALUES (:id_pres, NOW(), :cond, :obs)";
-                $stmtDev = $pdo->prepare($sqlDev);
+            if ($prestamo) {
+                $id_libro = $prestamo['id_libro'];
+                $fechaDevReal = date('Y-m-d H:i:s');
+
+                $stmtDev = $pdo->prepare("INSERT INTO devolucion (id_prestamo, fechaDevolucion, condicion, observaciones) VALUES (:id_p, :f_dev, :cond, :obs)");
                 $stmtDev->execute([
-                    ':id_pres' => $id_prestamo,
-                    ':cond'    => $condicion,
-                    ':obs'     => $observaciones
+                    ':id_p'  => $id_prestamo,
+                    ':f_dev' => $fechaDevReal,
+                    ':cond'  => $condicion,
+                    ':obs'   => $observaciones
                 ]);
 
-                $stmtUpdPres = $pdo->prepare("UPDATE prestamo SET estado = 'Devuelto' WHERE id_prestamo = :id");
-                $stmtUpdPres->execute([':id' => $id_prestamo]);
+                $stmtUpd = $pdo->prepare("UPDATE prestamo SET estado = 'Devuelto' WHERE id_prestamo = :id");
+                $stmtUpd->execute([':id' => $id_prestamo]);
 
-                $stmtUpdLib = $pdo->prepare("UPDATE libros SET stock = stock + 1 WHERE id_libro = :id_lib");
-                $stmtUpdLib->execute([':id_lib' => $prestamo['id_libro']]);
+                $stmtStock = $pdo->prepare("UPDATE libros SET stock = stock + 1 WHERE id_libro = :id");
+                $stmtStock->execute([':id' => $id_libro]);
 
                 $pdo->commit();
-                $mensaje = "¡Devolución registrada con éxito!";
+                $mensaje = "¡Devolución registrada con éxito y stock actualizado!";
             } else {
+                $pdo->rollBack();
                 $mensaje = "Error: El préstamo no existe o ya fue devuelto.";
             }
-        } catch (PDOException $e) {
+        } catch (Exception $e) {
             $pdo->rollBack();
-            $mensaje = "Error al procesar la devolución.";
+            $mensaje = "Error en el sistema al procesar la devolución.";
         }
     } else {
-        $mensaje = "Por favor, selecciona un préstamo válido.";
+        $mensaje = "Selecciona un préstamo activo y la condición del ejemplar.";
     }
 }
 
-$prestamosActivos = $pdo->query("SELECT p.id_prestamo, e.nombre, e.apellidoPaterno, l.titulo, p.fechaPrestamo 
-                                 FROM prestamo p 
-                                 JOIN estudiante e ON p.numeroControl = e.numeroControl 
-                                 JOIN libros l ON p.id_libro = l.id_libro 
-                                 WHERE p.estado = 'Activo'")->fetchAll();
+$prestamosActivos = $pdo->query("SELECT p.id_prestamo, e.nombre, e.apellidoPaterno, l.titulo FROM prestamo p JOIN estudiante e ON p.numeroControl = e.numeroControl JOIN libros l ON p.id_libro = l.id_libro WHERE p.estado = 'Activo'")->fetchAll();
 
-$devoluciones = $pdo->query("SELECT d.*, p.id_prestamo, e.nombre AS est_nombre, e.apellidoPaterno AS est_app, l.titulo AS libro_titulo 
-                             FROM devolucion d 
-                             JOIN prestamo p ON d.id_prestamo = p.id_prestamo 
-                             JOIN estudiante e ON p.numeroControl = e.numeroControl 
-                             JOIN libros l ON p.id_libro = l.id_libro")->fetchAll();
+// --- BÚSQUEDA DINÁMICA CON PARÁMETROS ÚNICOS ---
+$busqueda = trim($_GET['busqueda'] ?? '');
+if (!empty($busqueda)) {
+    $stmt = $pdo->prepare("SELECT d.*, p.id_prestamo, e.nombre, e.apellidoPaterno, l.titulo FROM devolucion d JOIN prestamo p ON d.id_prestamo = p.id_prestamo JOIN estudiante e ON p.numeroControl = e.numeroControl JOIN libros l ON p.id_libro = l.id_libro WHERE e.nombre LIKE :b1 OR e.apellidoPaterno LIKE :b2 OR l.titulo LIKE :b3 OR d.condicion LIKE :b4 ORDER BY d.id_devolucion DESC");
+    $stmt->execute([
+        ':b1' => "%$busqueda%",
+        ':b2' => "%$busqueda%",
+        ':b3' => "%$busqueda%",
+        ':b4' => "%$busqueda%"
+    ]);
+    $devoluciones = $stmt->fetchAll();
+} else {
+    $devoluciones = $pdo->query("SELECT d.*, p.id_prestamo, e.nombre, e.apellidoPaterno, l.titulo FROM devolucion d JOIN prestamo p ON d.id_prestamo = p.id_prestamo JOIN estudiante e ON p.numeroControl = e.numeroControl JOIN libros l ON p.id_libro = l.id_libro ORDER BY d.id_devolucion DESC")->fetchAll();
+}
 ?>
 
 <!DOCTYPE html>
@@ -92,12 +106,19 @@ $devoluciones = $pdo->query("SELECT d.*, p.id_prestamo, e.nombre AS est_nombre, 
         .card { background: var(--card-bg); padding: 25px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 30px; }
         .card h3 { margin-bottom: 15px; font-size: 1.1rem; color: var(--primary); }
 
-        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 15px; margin-bottom: 15px; }
         .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 5px; }
         .form-group select, .form-group input { width: 100%; padding: 10px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; }
 
         .btn { background-color: var(--primary); color: white; padding: 10px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
         .btn:hover { background-color: var(--primary-dark); }
+
+        .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        .search-bar input { flex: 1; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; }
+        .btn-search { background-color: #0284c7; color: white; padding: 10px 18px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-search:hover { background-color: #0369a1; }
+        .btn-clear { background-color: #64748b; color: white; padding: 10px 18px; border-radius: 6px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-clear:hover { background-color: #475569; }
 
         .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; background-color: #d1fae5; color: #065f46; }
 
@@ -113,13 +134,15 @@ $devoluciones = $pdo->query("SELECT d.*, p.id_prestamo, e.nombre AS est_nombre, 
         <h2>BiblioTec</h2>
         <p>Sistema de Biblioteca</p>
         <nav>
-            <a href="index.php">🏠 Principal</a>
+            <a href="dashboard_admin.php">🏠 Principal</a>
             <a href="prestamos.php">📅 Préstamos</a>
             <a href="devoluciones.php" class="active">🔄 Devoluciones</a>
             <a href="estudiantes.php">🎓 Estudiantes</a>
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php">🏷️ Categorías</a>
-            <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php endif; ?>
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>
@@ -134,24 +157,25 @@ $devoluciones = $pdo->query("SELECT d.*, p.id_prestamo, e.nombre AS est_nombre, 
         <div class="card">
             <h3>Registrar Devolución de Libro</h3>
             <form action="devoluciones.php" method="POST">
+                <input type="hidden" name="accion" value="devolver">
                 <div class="form-grid">
-                    <div class="form-group" style="grid-column: span 2;">
+                    <div class="form-group">
                         <label>Seleccionar Préstamo Activo:</label>
                         <select name="id_prestamo" required>
                             <option value="">Selecciona el préstamo a devolver</option>
-                            <?php foreach ($prestamosActivos as $pres): ?>
-                                <option value="<?php echo $pres['id_prestamo']; ?>">
-                                    <?php echo htmlspecialchars('ID #' . $pres['id_prestamo'] . ' - ' . $pres['nombre'] . ' ' . $pres['apellidoPaterno'] . ' ("' . $pres['titulo'] . '")'); ?>
+                            <?php foreach ($prestamosActivos as $pa): ?>
+                                <option value="<?php echo $pa['id_prestamo']; ?>">
+                                    <?php echo htmlspecialchars('Préstamo #' . $pa['id_prestamo'] . ' - ' . $pa['nombre'] . ' ' . $pa['apellidoPaterno'] . ' (' . $pa['titulo'] . ')'); ?>
                                 </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="form-group">
                         <label>Condición del Ejemplar:</label>
-                        <select name="condicion">
-                            <option value="NUEVO">Nuevo</option>
-                            <option value="BUENO" selected>Bueno</option>
-                            <option value="DETERIORADO">Deteriorado</option>
+                        <select name="condicion" required>
+                            <option value="Bueno">Bueno</option>
+                            <option value="Deteriorado">Deteriorado</option>
+                            <option value="Extraviado">Extraviado</option>
                         </select>
                     </div>
                     <div class="form-group">
@@ -167,6 +191,17 @@ $devoluciones = $pdo->query("SELECT d.*, p.id_prestamo, e.nombre AS est_nombre, 
             <div style="padding: 20px; border-bottom: 1px solid var(--border-color);">
                 <h3>Historial de Devoluciones</h3>
             </div>
+
+            <div style="padding: 20px 20px 0 20px;">
+                <form action="devoluciones.php" method="GET" class="search-bar">
+                    <input type="text" name="busqueda" placeholder="Buscar por estudiante, libro o condición..." value="<?php echo htmlspecialchars($busqueda); ?>">
+                    <button type="submit" class="btn-search">🔍 Buscar</button>
+                    <?php if (!empty($busqueda)): ?>
+                        <a href="devoluciones.php" class="btn-clear">❌ Limpiar</a>
+                    <?php endif; ?>
+                </form>
+            </div>
+
             <table>
                 <thead>
                     <tr>
@@ -181,21 +216,21 @@ $devoluciones = $pdo->query("SELECT d.*, p.id_prestamo, e.nombre AS est_nombre, 
                 </thead>
                 <tbody>
                     <?php if (!empty($devoluciones)): ?>
-                        <?php foreach ($devoluciones as $dev): ?>
+                        <?php foreach ($devoluciones as $d): ?>
                             <tr>
-                                <td><strong>#<?php echo htmlspecialchars($dev['id_devolucion']); ?></strong></td>
-                                <td>#<?php echo htmlspecialchars($dev['id_prestamo']); ?></td>
-                                <td><?php echo htmlspecialchars($dev['est_nombre'] . ' ' . $dev['est_app']); ?></td>
-                                <td><?php echo htmlspecialchars($dev['libro_titulo']); ?></td>
-                                <td><?php echo htmlspecialchars($dev['fechaDevolucion']); ?></td>
-                                <td><span style="background: #d1fae5; color: #065f46; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;"><?php echo htmlspecialchars($dev['condicion']); ?></span></td>
-                                <td><?php echo htmlspecialchars($dev['observaciones']); ?></td>
+                                <td><strong>#<?php echo htmlspecialchars($d['id_devolucion']); ?></strong></td>
+                                <td>#<?php echo htmlspecialchars($d['id_prestamo']); ?></td>
+                                <td><?php echo htmlspecialchars($d['nombre'] . ' ' . $d['apellidoPaterno']); ?></td>
+                                <td><?php echo htmlspecialchars($d['titulo']); ?></td>
+                                <td><?php echo htmlspecialchars($d['fechaDevolucion']); ?></td>
+                                <td><span style="background: #e0f2fe; color: #0369a1; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;"><?php echo htmlspecialchars($d['condicion']); ?></span></td>
+                                <td><?php echo htmlspecialchars($d['observaciones'] ?? 'N/A'); ?></td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
                             <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                                No hay devoluciones registradas todavía.
+                                No se encontraron registros de devoluciones con ese criterio.
                             </td>
                         </tr>
                     <?php endif; ?>
