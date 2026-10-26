@@ -16,7 +16,6 @@ $options = [
 try {
     $pdo = new PDO($dsn, $user, $pass, $options);
     
-    echo "¡Conexión exitosa a la BD!";
 } catch (\PDOException $e) {
     echo "Error de conexión a la Base de Datos: " . $e->getMessage();
     exit;
