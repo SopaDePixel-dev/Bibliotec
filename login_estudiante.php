@@ -6,26 +6,27 @@ $error = "";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $numeroControl = trim($_POST['numeroControl']);
+    $contrasena    = trim($_POST['contrasena']);
 
-    if (!empty($numeroControl)) {
+    if (!empty($numeroControl) && !empty($contrasena)) {
         try {
             $stmt = $pdo->prepare("SELECT * FROM estudiante WHERE numeroControl = :nc AND estatus = 'ACTIVO'");
             $stmt->execute([':nc' => $numeroControl]);
             $estudiante = $stmt->fetch();
 
-            if ($estudiante) {
+            if ($estudiante && password_verify($contrasena, $estudiante['contrasena'])) {
                 $_SESSION['numeroControl'] = $estudiante['numeroControl'];
                 $_SESSION['nombre_estudiante'] = $estudiante['nombre'] . ' ' . $estudiante['apellidoPaterno'];
                 header("Location: portal_estudiante.php");
                 exit;
             } else {
-                $error = "Número de control no encontrado o estudiante inactivo.";
+                $error = "Número de control o contraseña incorrectos.";
             }
         } catch (PDOException $e) {
             $error = "Error en el sistema.";
         }
     } else {
-        $error = "Ingresa tu número de control.";
+        $error = "Por favor, completa todos los campos.";
     }
 }
 ?>
@@ -63,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .btn:hover { background-color: var(--primary-dark); }
 
         .error-alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.85rem; background-color: #fee2e2; color: #991b1b; text-align: center; }
-        .back-link { display: block; text-align: center; margin-top: 15px; font-size: 0.85rem; color: var(--text-muted); text-decoration: none; }
+        .back-link { display: block; text-align: center; margin-top: 15px; font-size: 0.85rem; color: var(--text-muted); text-align: center; text-decoration: none; }
         .back-link:hover { color: var(--primary); }
     </style>
 </head>
@@ -71,7 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     <div class="login-card">
         <h2>Portal de Estudiantes</h2>
-        <p>BiblioTec - Consulta tu acervo y préstamos</p>
+        <p>BiblioTec - Acceso Seguro</p>
 
         <?php if (!empty($error)): ?>
             <div class="error-alert"><?php echo htmlspecialchars($error); ?></div>
@@ -79,8 +80,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form action="login_estudiante.php" method="POST">
             <div class="form-group">
-                <label>Número de Control (9 caracteres):</label>
+                <label>Número de Control:</label>
                 <input type="text" name="numeroControl" maxlength="9" required placeholder="Ej. 210200123">
+            </div>
+            <div class="form-group">
+                <label>Contraseña / NIP:</label>
+                <input type="password" name="contrasena" required placeholder="********">
             </div>
             <button type="submit" class="btn">Entrar a mi Portal</button>
         </form>
