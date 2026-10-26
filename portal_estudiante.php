@@ -8,19 +8,54 @@ if (!isset($_SESSION['numeroControl'])) {
 include 'conexion.php';
 $nc = $_SESSION['numeroControl'];
 
+// Obtener datos del estudiante
 $stmtEst = $pdo->prepare("SELECT * FROM estudiante WHERE numeroControl = :nc");
 $stmtEst->execute([':nc' => $nc]);
 $estudiante = $stmtEst->fetch();
 
-$libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LEFT JOIN categoria c ON l.id_categoria = c.id_categoria")->fetchAll();
+// --- 1. FILTRO PARA CATÁLOGO DE LIBROS ---
+$q_libros = trim($_GET['q_libros'] ?? '');
+if (!empty($q_libros)) {
+    $stmtLibros = $pdo->prepare("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LEFT JOIN categoria c ON l.id_categoria = c.id_categoria WHERE l.titulo LIKE :b1 OR l.editorial LIKE :b2 OR l.isbn LIKE :b3 ORDER BY l.id_libro DESC");
+    $stmtLibros->execute([
+        ':b1' => "%$q_libros%",
+        ':b2' => "%$q_libros%",
+        ':b3' => "%$q_libros%"
+    ]);
+    $libros = $stmtLibros->fetchAll();
+} else {
+    $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LEFT JOIN categoria c ON l.id_categoria = c.id_categoria ORDER BY l.id_libro DESC")->fetchAll();
+}
 
-$stmtPrestamosActivos = $pdo->prepare("SELECT p.*, l.titulo, l.editorial FROM prestamo p JOIN libros l ON p.id_libro = l.id_libro WHERE p.numeroControl = :nc AND p.estado = 'Activo'");
-$stmtPrestamosActivos->execute([':nc' => $nc]);
-$prestamosActivos = $stmtPrestamosActivos->fetchAll();
+// --- 2. FILTRO PARA PRÉSTAMOS ACTIVOS ---
+$q_activos = trim($_GET['q_activos'] ?? '');
+if (!empty($q_activos)) {
+    $stmtActivos = $pdo->prepare("SELECT p.*, l.titulo, l.editorial FROM prestamo p JOIN libros l ON p.id_libro = l.id_libro WHERE p.numeroControl = :nc AND p.estado = 'Activo' AND (l.titulo LIKE :b1 OR l.editorial LIKE :b2) ORDER BY p.id_prestamo DESC");
+    $stmtActivos->execute([
+        ':nc' => $nc,
+        ':b1' => "%$q_activos%",
+        ':b2' => "%$q_activos%"
+    ]);
+} else {
+    $stmtActivos = $pdo->prepare("SELECT p.*, l.titulo, l.editorial FROM prestamo p JOIN libros l ON p.id_libro = l.id_libro WHERE p.numeroControl = :nc AND p.estado = 'Activo' ORDER BY p.id_prestamo DESC");
+    $stmtActivos->execute([':nc' => $nc]);
+}
+$prestamosActivos = $stmtActivos->fetchAll();
 
-$stmtHistorial = $pdo->prepare("SELECT p.*, l.titulo, d.fechaDevolucion AS fechaRealDev, d.condicion, d.observaciones FROM prestamo p JOIN libros l ON p.id_libro = l.id_libro LEFT JOIN devolucion d ON p.id_prestamo = d.id_prestamo WHERE p.numeroControl = :nc");
-$stmtHistorial->execute([':nc' => $nc]);
-$historial = $stmtHistorial->fetchAll();
+// --- 3. FILTRO PARA HISTORIAL DE PRÉSTAMOS ---
+$q_historial = trim($_GET['q_historial'] ?? '');
+if (!empty($q_historial)) {
+    $stmtHist = $pdo->prepare("SELECT p.*, l.titulo, d.fechaDevolucion AS fechaRealDev, d.condicion, d.observaciones FROM prestamo p JOIN libros l ON p.id_libro = l.id_libro LEFT JOIN devolucion d ON p.id_prestamo = d.id_prestamo WHERE p.numeroControl = :nc AND (l.titulo LIKE :b1 OR p.estado LIKE :b2) ORDER BY p.id_prestamo DESC");
+    $stmtHist->execute([
+        ':nc' => $nc,
+        ':b1' => "%$q_historial%",
+        ':b2' => "%$q_historial%"
+    ]);
+} else {
+    $stmtHist = $pdo->prepare("SELECT p.*, l.titulo, d.fechaDevolucion AS fechaRealDev, d.condicion, d.observaciones FROM prestamo p JOIN libros l ON p.id_libro = l.id_libro LEFT JOIN devolucion d ON p.id_prestamo = d.id_prestamo WHERE p.numeroControl = :nc ORDER BY p.id_prestamo DESC");
+    $stmtHist->execute([':nc' => $nc]);
+}
+$historial = $stmtHist->fetchAll();
 ?>
 
 <!DOCTYPE html>
@@ -71,6 +106,13 @@ $historial = $stmtHistorial->fetchAll();
         .profile-item label { font-size: 0.75rem; text-transform: uppercase; color: var(--text-muted); font-weight: 600; display: block; margin-bottom: 4px; }
         .profile-item p { font-size: 1rem; font-weight: 600; color: var(--text-main); }
 
+        .search-bar { display: flex; gap: 10px; padding: 20px 20px 0 20px; }
+        .search-bar input { flex: 1; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; }
+        .btn-search { background-color: #0284c7; color: white; padding: 10px 18px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-search:hover { background-color: #0369a1; }
+        .btn-clear { background-color: #64748b; color: white; padding: 10px 18px; border-radius: 6px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-clear:hover { background-color: #475569; }
+
         table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; background: var(--card-bg); border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); }
         th, td { padding: 12px 16px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
         th { background-color: #f8fafc; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); }
@@ -119,8 +161,17 @@ $historial = $stmtHistorial->fetchAll();
                 </div>
             </div>
 
+            <!-- SECCIÓN PRÉSTAMOS ACTIVOS -->
             <h2 class="section-title">Mis Préstamos Activos</h2>
             <div class="card" style="padding: 0; overflow: hidden;">
+                <form action="portal_estudiante.php" method="GET" class="search-bar">
+                    <input type="text" name="q_activos" placeholder="Filtrar préstamos activos por título o editorial..." value="<?php echo htmlspecialchars($q_activos); ?>">
+                    <button type="submit" class="btn-search">🔍 Buscar</button>
+                    <?php if (!empty($q_activos)): ?>
+                        <a href="portal_estudiante.php" class="btn-clear">❌ Limpiar</a>
+                    <?php endif; ?>
+                </form>
+
                 <table>
                     <thead>
                         <tr>
@@ -147,7 +198,7 @@ $historial = $stmtHistorial->fetchAll();
                         <?php else: ?>
                             <tr>
                                 <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                                    No tienes préstamos activos en este momento.
+                                    No se encontraron préstamos activos con ese criterio.
                                 </td>
                             </tr>
                         <?php endif; ?>
@@ -155,8 +206,17 @@ $historial = $stmtHistorial->fetchAll();
                 </table>
             </div>
 
+            <!-- SECCIÓN CATÁLOGO DE LIBROS -->
             <h2 class="section-title">Catálogo de Libros y Stock Disponible</h2>
             <div class="card" style="padding: 0; overflow: hidden;">
+                <form action="portal_estudiante.php" method="GET" class="search-bar">
+                    <input type="text" name="q_libros" placeholder="Buscar libro por título, editorial o ISBN..." value="<?php echo htmlspecialchars($q_libros); ?>">
+                    <button type="submit" class="btn-search">🔍 Buscar</button>
+                    <?php if (!empty($q_libros)): ?>
+                        <a href="portal_estudiante.php" class="btn-clear">❌ Limpiar</a>
+                    <?php endif; ?>
+                </form>
+
                 <table>
                     <thead>
                         <tr>
@@ -181,7 +241,7 @@ $historial = $stmtHistorial->fetchAll();
                         <?php else: ?>
                             <tr>
                                 <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                                    No hay libros registrados en el catálogo.
+                                    No se encontraron libros en el catálogo con ese criterio.
                                 </td>
                             </tr>
                         <?php endif; ?>
@@ -189,8 +249,17 @@ $historial = $stmtHistorial->fetchAll();
                 </table>
             </div>
 
+            <!-- SECCIÓN HISTORIAL DE PRÉSTAMOS -->
             <h2 class="section-title">Historial de Préstamos Anteriores</h2>
             <div class="card" style="padding: 0; overflow: hidden;">
+                <form action="portal_estudiante.php" method="GET" class="search-bar">
+                    <input type="text" name="q_historial" placeholder="Buscar en historial por título o estado..." value="<?php echo htmlspecialchars($q_historial); ?>">
+                    <button type="submit" class="btn-search">🔍 Buscar</button>
+                    <?php if (!empty($q_historial)): ?>
+                        <a href="portal_estudiante.php" class="btn-clear">❌ Limpiar</a>
+                    <?php endif; ?>
+                </form>
+
                 <table>
                     <thead>
                         <tr>
@@ -217,7 +286,7 @@ $historial = $stmtHistorial->fetchAll();
                         <?php else: ?>
                             <tr>
                                 <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                                    No cuentas con historial de préstamos previos.
+                                    No se encontraron registros en el historial con ese criterio.
                                 </td>
                             </tr>
                         <?php endif; ?>

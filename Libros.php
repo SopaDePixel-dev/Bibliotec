@@ -38,7 +38,7 @@ if (isset($_GET['editar'])) {
 }
 
 // --- 3. GUARDAR (CREAR O ACTUALIZAR) ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'guardar') {
     $id_libro     = intval($_POST['id_libro'] ?? 0);
     $titulo       = trim($_POST['titulo']);
     $editorial    = trim($_POST['editorial']);
@@ -50,7 +50,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($titulo) && !empty($isbn) && $id_categoria > 0) {
         try {
             if ($es_actualizacion && $id_libro > 0) {
-                // Actualizar (Update)
                 $sql = "UPDATE libros SET titulo = :titulo, editorial = :editorial, isbn = :isbn, stock = :stock, id_categoria = :id_cat WHERE id_libro = :id";
                 $stmt = $pdo->prepare($sql);
                 $stmt->execute([
@@ -63,7 +62,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $mensaje = "¡Libro actualizado con éxito!";
             } else {
-                // Insertar (Create)
                 $sql = "INSERT INTO libros (titulo, editorial, isbn, stock, id_categoria) 
                         VALUES (:titulo, :editorial, :isbn, :stock, :id_cat)";
                 $stmt = $pdo->prepare($sql);
@@ -76,7 +74,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ]);
                 $mensaje = "¡Libro registrado con éxito!";
             }
-            // Limpiar formulario tras guardar
             $editando = false;
             $lib_edit = ['id_libro' => '', 'titulo' => '', 'editorial' => '', 'isbn' => '', 'stock' => 1, 'id_categoria' => ''];
         } catch (PDOException $e) {
@@ -87,8 +84,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+// --- 4. CONSULTA CON BÚSQUEDA DINÁMICA ---
+$busqueda = trim($_GET['busqueda'] ?? '');
 $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
-$libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LEFT JOIN categoria c ON l.id_categoria = c.id_categoria")->fetchAll();
+
+if (!empty($busqueda)) {
+    $stmt = $pdo->prepare("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LEFT JOIN categoria c ON l.id_categoria = c.id_categoria WHERE l.titulo LIKE :b OR l.editorial LIKE :b OR l.isbn LIKE :b ORDER BY l.id_libro DESC");
+    $stmt->execute([':b' => "%$busqueda%"]);
+    $libros = $stmt->fetchAll();
+} else {
+    $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LEFT JOIN categoria c ON l.id_categoria = c.id_categoria ORDER BY l.id_libro DESC")->fetchAll();
+}
 ?>
 
 <!DOCTYPE html>
@@ -133,6 +139,13 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LE
         .btn-cancel { background-color: #64748b; margin-left: 10px; text-decoration: none; display: inline-block; padding: 10px 20px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.9rem; }
         .btn-cancel:hover { background-color: #475569; }
 
+        .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        .search-bar input { flex: 1; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; }
+        .btn-search { background-color: #0284c7; color: white; padding: 10px 18px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-search:hover { background-color: #0369a1; }
+        .btn-clear { background-color: #64748b; color: white; padding: 10px 18px; border-radius: 6px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-clear:hover { background-color: #475569; }
+
         .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; background-color: #d1fae5; color: #065f46; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; background: var(--card-bg); border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); }
@@ -142,9 +155,7 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LE
 
         .action-link { text-decoration: none; font-weight: 600; font-size: 0.85rem; margin-right: 10px; }
         .edit-link { color: #0284c7; }
-        .edit-link:hover { text-decoration: underline; }
         .delete-link { color: #dc2626; }
-        .delete-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -153,19 +164,21 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LE
         <h2>BiblioTec</h2>
         <p>Sistema de Biblioteca</p>
         <nav>
-            <a href="index.php">🏠 Principal</a>
+            <a href="dashboard_admin.php">🏠 Principal</a>
             <a href="prestamos.php">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
             <a href="estudiantes.php">🎓 Estudiantes</a>
             <a href="libros.php" class="active">📖 Libros</a>
             <a href="categorias.php">🏷️ Categorías</a>
-            <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php endif; ?>
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>
 
     <main>
-        <h1>Gestión de Libros (CRUD Completo)</h1>
+        <h1>Gestión de Libros</h1>
 
         <?php if (!empty($mensaje)): ?>
             <div class="alert"><?php echo htmlspecialchars($mensaje); ?></div>
@@ -174,6 +187,7 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LE
         <div class="card">
             <h3><?php echo $editando ? 'Editar Libro' : 'Registrar Nuevo Libro'; ?></h3>
             <form action="libros.php" method="POST">
+                <input type="hidden" name="accion" value="guardar">
                 <input type="hidden" name="es_actualizacion" value="<?php echo $editando ? '1' : '0'; ?>">
                 <input type="hidden" name="id_libro" value="<?php echo htmlspecialchars($lib_edit['id_libro']); ?>">
                 <div class="form-grid">
@@ -216,6 +230,17 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LE
             <div style="padding: 20px; border-bottom: 1px solid var(--border-color);">
                 <h3>Catálogo de Libros Registrados</h3>
             </div>
+            
+            <div style="padding: 20px 20px 0 20px;">
+                <form action="libros.php" method="GET" class="search-bar">
+                    <input type="text" name="busqueda" placeholder="Buscar por título, editorial o ISBN..." value="<?php echo htmlspecialchars($busqueda); ?>">
+                    <button type="submit" class="btn-search">🔍 Buscar</button>
+                    <?php if (!empty($busqueda)): ?>
+                        <a href="libros.php" class="btn-clear">❌ Limpiar</a>
+                    <?php endif; ?>
+                </form>
+            </div>
+
             <table>
                 <thead>
                     <tr>
@@ -247,7 +272,7 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LE
                     <?php else: ?>
                         <tr>
                             <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                                No hay libros registrados en el catálogo todavía.
+                                No se encontraron libros registrados con ese criterio.
                             </td>
                         </tr>
                     <?php endif; ?>

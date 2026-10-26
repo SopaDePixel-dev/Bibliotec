@@ -64,7 +64,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .btn:hover { background-color: var(--primary-dark); }
 
         .error-alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.85rem; background-color: #fee2e2; color: #991b1b; text-align: center; }
-        .back-link { display: block; text-align: center; margin-top: 15px; font-size: 0.85rem; color: var(--text-muted); text-align: center; text-decoration: none; }
+        .back-link { display: block; text-align: center; margin-top: 15px; font-size: 0.85rem; color: var(--text-muted); text-decoration: none; }
         .back-link:hover { color: var(--primary); }
     </style>
 </head>
@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
             <button type="submit" class="btn">Entrar a mi Portal</button>
         </form>
-        <a href="login.php" class="back-link">← Volver al login de Administradores</a>
+        <a href="index.php" class="back-link">← Volver al inicio</a>
     </div>
 
 </body>

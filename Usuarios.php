@@ -1,9 +1,8 @@
 <?php
 session_start();
 
-// Validar acceso exclusivo para ADMIN
 if (!isset($_SESSION['id_usuario']) || $_SESSION['rol'] !== 'ADMIN') {
-    header("Location: index.php");
+    header("Location: dashboard_admin.php");
     exit;
 }
 
@@ -48,7 +47,7 @@ if (isset($_GET['editar'])) {
 }
 
 // --- 3. GUARDAR (CREAR O ACTUALIZAR) ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['accion']) && $_POST['accion'] === 'guardar') {
     $id_usuario    = intval($_POST['id_usuario'] ?? 0);
     $nombre        = trim($_POST['nombre']);
     $nombreUsuario = trim($_POST['nombreUsuario']);
@@ -59,7 +58,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!empty($nombre) && !empty($nombreUsuario) && !empty($rol)) {
         try {
             if ($es_actualizacion && $id_usuario > 0) {
-                // Actualizar (Update)
                 if (!empty($contrasena)) {
                     $passwordHash = password_hash($contrasena, PASSWORD_DEFAULT);
                     $sql = "UPDATE usuario SET nombre = :nombre, nombreUsuario = :nusuario, contrasena = :pass, rol = :rol WHERE id_usuario = :id";
@@ -72,7 +70,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 $mensaje = "¡Usuario actualizado con éxito!";
             } else {
-                // Insertar (Create)
                 if (!empty($contrasena)) {
                     $passwordHash = password_hash($contrasena, PASSWORD_DEFAULT);
                     $sql = "INSERT INTO usuario (nombre, nombreUsuario, contrasena, rol) VALUES (:nombre, :nusuario, :pass, :rol)";
@@ -93,7 +90,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usuario")->fetchAll();
+// --- 4. CONSULTA CON BÚSQUEDA ---
+$busqueda = trim($_GET['busqueda'] ?? '');
+if (!empty($busqueda)) {
+    $stmt = $pdo->prepare("SELECT id_usuario, nombre, nombreUsuario, rol FROM usuario WHERE nombre LIKE :b OR nombreUsuario LIKE :b ORDER BY id_usuario DESC");
+    $stmt->execute([':b' => "%$busqueda%"]);
+    $usuarios = $stmt->fetchAll();
+} else {
+    $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usuario ORDER BY id_usuario DESC")->fetchAll();
+}
 ?>
 
 <!DOCTYPE html>
@@ -138,6 +143,13 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
         .btn-cancel { background-color: #64748b; margin-left: 10px; text-decoration: none; display: inline-block; padding: 10px 20px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.9rem; }
         .btn-cancel:hover { background-color: #475569; }
 
+        .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+        .search-bar input { flex: 1; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.9rem; }
+        .btn-search { background-color: #0284c7; color: white; padding: 10px 18px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-search:hover { background-color: #0369a1; }
+        .btn-clear { background-color: #64748b; color: white; padding: 10px 18px; border-radius: 6px; font-weight: 600; text-decoration: none; display: inline-flex; align-items: center; }
+        .btn-clear:hover { background-color: #475569; }
+
         .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; background-color: #d1fae5; color: #065f46; }
 
         table { width: 100%; border-collapse: collapse; margin-top: 10px; text-align: left; background: var(--card-bg); border-radius: 10px; overflow: hidden; border: 1px solid var(--border-color); }
@@ -147,9 +159,7 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
 
         .action-link { text-decoration: none; font-weight: 600; font-size: 0.85rem; margin-right: 10px; }
         .edit-link { color: #0284c7; }
-        .edit-link:hover { text-decoration: underline; }
         .delete-link { color: #dc2626; }
-        .delete-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -158,7 +168,7 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
         <h2>BiblioTec</h2>
         <p>Sistema de Biblioteca</p>
         <nav>
-            <a href="index.php">🏠 Principal</a>
+            <a href="dashboard_admin.php">🏠 Principal</a>
             <a href="prestamos.php">📅 Préstamos</a>
             <a href="devoluciones.php">🔄 Devoluciones</a>
             <a href="estudiantes.php">🎓 Estudiantes</a>
@@ -172,7 +182,7 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
     </aside>
 
     <main>
-        <h1>Gestión de Usuarios (CRUD Completo)</h1>
+        <h1>Gestión de Usuarios del Sistema</h1>
 
         <?php if (!empty($mensaje)): ?>
             <div class="alert"><?php echo htmlspecialchars($mensaje); ?></div>
@@ -181,6 +191,7 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
         <div class="card">
             <h3><?php echo $editando ? 'Editar Usuario' : 'Registrar Nuevo Usuario'; ?></h3>
             <form action="usuarios.php" method="POST">
+                <input type="hidden" name="accion" value="guardar">
                 <input type="hidden" name="es_actualizacion" value="<?php echo $editando ? '1' : '0'; ?>">
                 <input type="hidden" name="id_usuario" value="<?php echo htmlspecialchars($usr_edit['id_usuario']); ?>">
                 <div class="form-grid">
@@ -215,6 +226,17 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
             <div style="padding: 20px; border-bottom: 1px solid var(--border-color);">
                 <h3>Usuarios Autorizados</h3>
             </div>
+
+            <div style="padding: 20px 20px 0 20px;">
+                <form action="usuarios.php" method="GET" class="search-bar">
+                    <input type="text" name="busqueda" placeholder="Buscar por nombre o usuario..." value="<?php echo htmlspecialchars($busqueda); ?>">
+                    <button type="submit" class="btn-search">🔍 Buscar</button>
+                    <?php if (!empty($busqueda)): ?>
+                        <a href="usuarios.php" class="btn-clear">❌ Limpiar</a>
+                    <?php endif; ?>
+                </form>
+            </div>
+
             <table>
                 <thead>
                     <tr>
@@ -244,7 +266,7 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
                     <?php else: ?>
                         <tr>
                             <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">
-                                No hay usuarios registrados todavía.
+                                No se encontraron usuarios con ese criterio.
                             </td>
                         </tr>
                     <?php endif; ?>
