@@ -240,11 +240,9 @@ if (!empty($busqueda)) {
                             <option value="Ingeniería Civil" <?php echo ($est_edit['carrera'] === 'Ingeniería Civil') ? 'selected' : ''; ?>>Ingeniería Civil</option>
                             <option value="Ingeniería Electrónica" <?php echo ($est_edit['carrera'] === 'Ingeniería Electrónica') ? 'selected' : ''; ?>>Ingeniería Electrónica</option>
                             <option value="Ingeniería Bioquímica" <?php echo ($est_edit['carrera'] === 'Ingeniería Bioquímica') ? 'selected' : ''; ?>>Ingeniería Bioquímica</option>
-                            <option value="Ingeniería Ambiental" <?php echo ($est_edit['carrera'] === 'Ingeniería Ambiental') ? 'selected' : ''; ?>>Ingeniería Ambiental</option>
+                            <option value="Gastronomia" <?php echo ($est_edit['carrera'] === 'Gastronomia') ? 'selected' : ''; ?>>Gastronomia</option>
                             <option value="Ingeniería en Industrias Alimentarias" <?php echo ($est_edit['carrera'] === 'Ingeniería en Industrias Alimentarias') ? 'selected' : ''; ?>>Ingeniería en Industrias Alimentarias</option>
                             <option value="Ingeniería en Gestión Empresarial" <?php echo ($est_edit['carrera'] === 'Ingeniería en Gestión Empresarial') ? 'selected' : ''; ?>>Ingeniería en Gestión Empresarial</option>
-                            <option value="Licenciatura en Administración" <?php echo ($est_edit['carrera'] === 'Licenciatura en Administración') ? 'selected' : ''; ?>>Licenciatura en Administración</option>
-                            <option value="Contaduría Pública" <?php echo ($est_edit['carrera'] === 'Contaduría Pública') ? 'selected' : ''; ?>>Contaduría Pública</option>
                         </select>
                     </div>
                     <div class="form-group">
