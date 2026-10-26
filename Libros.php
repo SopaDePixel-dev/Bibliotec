@@ -2,29 +2,85 @@
 include 'conexion.php';
 
 $mensaje = "";
+$editando = false;
+$lib_edit = [
+    'id_libro' => '',
+    'titulo' => '',
+    'editorial' => '',
+    'isbn' => '',
+    'stock' => 1,
+    'id_categoria' => ''
+];
 
+// --- 1. ELIMINAR LIBRO ---
+if (isset($_GET['eliminar'])) {
+    $id = intval($_GET['eliminar']);
+    try {
+        $stmt = $pdo->prepare("DELETE FROM libros WHERE id_libro = :id");
+        $stmt->execute([':id' => $id]);
+        header("Location: libros.php");
+        exit;
+    } catch (PDOException $e) {
+        $mensaje = "Error: No se puede eliminar el libro porque tiene préstamos asociados.";
+    }
+}
+
+// --- 2. CARGAR DATOS PARA EDITAR ---
+if (isset($_GET['editar'])) {
+    $id = intval($_GET['editar']);
+    $stmt = $pdo->prepare("SELECT * FROM libros WHERE id_libro = :id");
+    $stmt->execute([':id' => $id]);
+    $resultado = $stmt->fetch();
+    if ($resultado) {
+        $editando = true;
+        $lib_edit = $resultado;
+    }
+}
+
+// --- 3. GUARDAR (CREAR O ACTUALIZAR) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id_libro     = intval($_POST['id_libro'] ?? 0);
     $titulo       = trim($_POST['titulo']);
     $editorial    = trim($_POST['editorial']);
     $isbn         = trim($_POST['isbn']);
     $stock        = intval($_POST['stock']);
     $id_categoria = intval($_POST['id_categoria']);
+    $es_actualizacion = $_POST['es_actualizacion'] === '1';
 
     if (!empty($titulo) && !empty($isbn) && $id_categoria > 0) {
         try {
-            $sql = "INSERT INTO libros (titulo, editorial, isbn, stock, id_categoria) 
-                    VALUES (:titulo, :editorial, :isbn, :stock, :id_categoria)";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
-                ':titulo'       => $titulo,
-                ':editorial'    => $editorial,
-                ':isbn'         => $isbn,
-                ':stock'        => $stock,
-                ':id_categoria' => $id_categoria
-            ]);
-            $mensaje = "¡Libro registrado con éxito!";
+            if ($es_actualizacion && $id_libro > 0) {
+                // Actualizar (Update)
+                $sql = "UPDATE libros SET titulo = :titulo, editorial = :editorial, isbn = :isbn, stock = :stock, id_categoria = :id_cat WHERE id_libro = :id";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([
+                    ':titulo'    => $titulo,
+                    ':editorial' => $editorial,
+                    ':isbn'      => $isbn,
+                    ':stock'     => $stock,
+                    ':id_cat'    => $id_categoria,
+                    ':id'        => $id_libro
+                ]);
+                $mensaje = "¡Libro actualizado con éxito!";
+            } else {
+                // Insertar (Create)
+                $sql = "INSERT INTO libros (titulo, editorial, isbn, stock, id_categoria) 
+                        VALUES (:titulo, :editorial, :isbn, :stock, :id_cat)";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([
+                    ':titulo'    => $titulo,
+                    ':editorial' => $editorial,
+                    ':isbn'      => $isbn,
+                    ':stock'     => $stock,
+                    ':id_cat'    => $id_categoria
+                ]);
+                $mensaje = "¡Libro registrado con éxito!";
+            }
+            // Limpiar formulario tras guardar
+            $editando = false;
+            $lib_edit = ['id_libro' => '', 'titulo' => '', 'editorial' => '', 'isbn' => '', 'stock' => 1, 'id_categoria' => ''];
         } catch (PDOException $e) {
-            $mensaje = "Error al registrar el libro.";
+            $mensaje = "Error al guardar el libro.";
         }
     } else {
         $mensaje = "Por favor, completa los campos obligatorios y selecciona una categoría.";
@@ -32,10 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
-
-$libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre 
-                       FROM libros l 
-                       LEFT JOIN categoria c ON l.id_categoria = c.id_categoria")->fetchAll();
+$libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre FROM libros l LEFT JOIN categoria c ON l.id_categoria = c.id_categoria")->fetchAll();
 ?>
 
 <!DOCTYPE html>
@@ -77,6 +130,8 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre
 
         .btn { background-color: var(--primary); color: white; padding: 10px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
         .btn:hover { background-color: var(--primary-dark); }
+        .btn-cancel { background-color: #64748b; margin-left: 10px; text-decoration: none; display: inline-block; padding: 10px 20px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.9rem; }
+        .btn-cancel:hover { background-color: #475569; }
 
         .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; background-color: #d1fae5; color: #065f46; }
 
@@ -84,6 +139,12 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre
         th, td { padding: 12px 16px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
         th { background-color: #f8fafc; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); }
         tr:hover td { background-color: #f8fafc; }
+
+        .action-link { text-decoration: none; font-weight: 600; font-size: 0.85rem; margin-right: 10px; }
+        .edit-link { color: #0284c7; }
+        .edit-link:hover { text-decoration: underline; }
+        .delete-link { color: #dc2626; }
+        .delete-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -104,43 +165,50 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre
     </aside>
 
     <main>
-        <h1>Gestión de Libros</h1>
+        <h1>Gestión de Libros (CRUD Completo)</h1>
 
         <?php if (!empty($mensaje)): ?>
             <div class="alert"><?php echo htmlspecialchars($mensaje); ?></div>
         <?php endif; ?>
 
         <div class="card">
-            <h3>Registrar Nuevo Libro</h3>
+            <h3><?php echo $editando ? 'Editar Libro' : 'Registrar Nuevo Libro'; ?></h3>
             <form action="libros.php" method="POST">
+                <input type="hidden" name="es_actualizacion" value="<?php echo $editando ? '1' : '0'; ?>">
+                <input type="hidden" name="id_libro" value="<?php echo htmlspecialchars($lib_edit['id_libro']); ?>">
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Título:</label>
-                        <input type="text" name="titulo" required placeholder="Título del libro">
+                        <input type="text" name="titulo" required placeholder="Título del libro" value="<?php echo htmlspecialchars($lib_edit['titulo']); ?>">
                     </div>
                     <div class="form-group">
                         <label>Editorial:</label>
-                        <input type="text" name="editorial" placeholder="Editorial">
+                        <input type="text" name="editorial" placeholder="Editorial" value="<?php echo htmlspecialchars($lib_edit['editorial']); ?>">
                     </div>
                     <div class="form-group">
                         <label>ISBN:</label>
-                        <input type="text" name="isbn" required placeholder="Código ISBN">
+                        <input type="text" name="isbn" required placeholder="Código ISBN" value="<?php echo htmlspecialchars($lib_edit['isbn']); ?>">
                     </div>
                     <div class="form-group">
                         <label>Stock / Ejemplares:</label>
-                        <input type="number" name="stock" value="1" min="1" required>
+                        <input type="number" name="stock" min="1" required value="<?php echo htmlspecialchars($lib_edit['stock']); ?>">
                     </div>
                     <div class="form-group">
                         <label>Categoría:</label>
                         <select name="id_categoria" required>
                             <option value="">Selecciona una categoría</option>
                             <?php foreach ($categorias as $cat): ?>
-                                <option value="<?php echo $cat['id_categoria']; ?>"><?php echo htmlspecialchars($cat['nombre']); ?></option>
+                                <option value="<?php echo $cat['id_categoria']; ?>" <?php echo ($lib_edit['id_categoria'] == $cat['id_categoria']) ? 'selected' : ''; ?>>
+                                    <?php echo htmlspecialchars($cat['nombre']); ?>
+                                </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                 </div>
-                <button type="submit" class="btn">Guardar Libro</button>
+                <button type="submit" class="btn"><?php echo $editando ? 'Actualizar Libro' : 'Guardar Libro'; ?></button>
+                <?php if ($editando): ?>
+                    <a href="libros.php" class="btn-cancel">Cancelar</a>
+                <?php endif; ?>
             </form>
         </div>
 
@@ -157,6 +225,7 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre
                         <th>ISBN</th>
                         <th>Categoría</th>
                         <th>Stock</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -169,11 +238,15 @@ $libros = $pdo->query("SELECT l.*, c.nombre AS categoria_nombre
                                 <td><?php echo htmlspecialchars($lib['isbn']); ?></td>
                                 <td><?php echo htmlspecialchars($lib['categoria_nombre'] ?? 'Sin categoría'); ?></td>
                                 <td><span style="background: #e0f2fe; color: #0369a1; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;"><?php echo htmlspecialchars($lib['stock']); ?> disp.</span></td>
+                                <td>
+                                    <a href="libros.php?editar=<?php echo $lib['id_libro']; ?>" class="action-link edit-link">✏️ Editar</a>
+                                    <a href="libros.php?eliminar=<?php echo $lib['id_libro']; ?>" class="action-link delete-link" onclick="return confirm('¿Estás seguro de eliminar este libro?');">🗑️ Eliminar</a>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                            <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">
                                 No hay libros registrados en el catálogo todavía.
                             </td>
                         </tr>

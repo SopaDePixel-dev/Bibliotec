@@ -2,29 +2,71 @@
 include 'conexion.php';
 
 $mensaje = "";
+$editando = false;
+$cat_edit = [
+    'id_categoria' => '',
+    'nombre' => '',
+    'descripcion' => ''
+];
 
+// --- 1. ELIMINAR CATEGORÍA ---
+if (isset($_GET['eliminar'])) {
+    $id = intval($_GET['eliminar']);
+    try {
+        $stmt =$pdo->prepare("DELETE FROM categoria WHERE id_categoria = :id");
+        $stmt->execute([':id' =>$id]);
+        header("Location: categorias.php");
+        exit;
+    } catch (PDOException $e) {$mensaje = "Error: No se puede eliminar la categoría porque tiene libros asociados.";
+    }
+}
+
+// --- 2. CARGAR DATOS PARA EDITAR ---
+if (isset($_GET['editar'])) {
+    $id = intval($_GET['editar']);
+    $stmt =$pdo->prepare("SELECT * FROM categoria WHERE id_categoria = :id");
+    $stmt->execute([':id' =>$id]);
+    $resultado =$stmt->fetch();
+    if ($resultado) {$editando = true;
+        $cat_edit =$resultado;
+    }
+}
+
+// --- 3. GUARDAR (CREAR O ACTUALIZAR) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $nombre      = trim($_POST['nombre']);
-    $descripcion = trim($_POST['descripcion']);
+    $id_categoria = intval($_POST['id_categoria'] ?? 0);
+    $nombre       = trim($_POST['nombre']);
+    $descripcion  = trim($_POST['descripcion']);
+    $es_actualizacion =$_POST['es_actualizacion'] === '1';
 
     if (!empty($nombre)) {
         try {
-            $sql = "INSERT INTO categoria (nombre, descripcion) VALUES (:nom, :desc)";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
-                ':nom'  => $nombre,
-                ':desc' => $descripcion
-            ]);
-            $mensaje = "¡Categoría registrada con éxito!";
-        } catch (PDOException $e) {
-            $mensaje = "Error al registrar la categoría.";
+            if ($es_actualizacion && $id_categoria > 0) { // Actualizar (Update)$sql = "UPDATE categoria SET nombre = :nombre, descripcion = :descripcion WHERE id_categoria = :id";
+                $stmt =$pdo->prepare($sql);$stmt->execute([
+                    ':nombre'      => $nombre,
+                    ':descripcion' => $descripcion,
+                    ':id'          => $id_categoria
+                ]);
+                $mensaje = "¡Categoría actualizada con éxito!";
+            } else {
+                // Insertar (Create)
+                $sql = "INSERT INTO categoria (nombre, descripcion) VALUES (:nombre, :descripcion)";
+                $stmt =$pdo->prepare($sql);$stmt->execute([
+                    ':nombre'      => $nombre,
+                    ':descripcion' => $descripcion
+                ]);
+                $mensaje = "¡Categoría registrada con éxito!";
+            }
+            $editando = false;
+            $cat_edit = ['id_categoria' => '', 'nombre' => '', 'descripcion' => ''];
+        } catch (PDOException $e) {$mensaje = "Error al guardar la categoría.";
         }
     } else {
         $mensaje = "El nombre de la categoría es obligatorio.";
     }
 }
 
-$categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
+$categorias =$pdo->query("SELECT * FROM categoria")->fetchAll();
 ?>
 
 <!DOCTYPE html>
@@ -67,6 +109,8 @@ $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
 
         .btn { background-color: var(--primary); color: white; padding: 10px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
         .btn:hover { background-color: var(--primary-dark); }
+        .btn-cancel { background-color: #64748b; margin-left: 10px; text-decoration: none; display: inline-block; padding: 10px 20px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.9rem; }
+        .btn-cancel:hover { background-color: #475569; }
 
         .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; background-color: #d1fae5; color: #065f46; }
 
@@ -74,6 +118,12 @@ $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
         th, td { padding: 12px 16px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
         th { background-color: #f8fafc; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); }
         tr:hover td { background-color: #f8fafc; }
+
+        .action-link { text-decoration: none; font-weight: 600; font-size: 0.85rem; margin-right: 10px; }
+        .edit-link { color: #0284c7; }
+        .edit-link:hover { text-decoration: underline; }
+        .delete-link { color: #dc2626; }
+        .delete-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -88,30 +138,37 @@ $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
             <a href="estudiantes.php">🎓 Estudiantes</a>
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php" class="active">🏷️ Categorías</a>
-            <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php if (isset($_SESSION['rol']) &&$_SESSION['rol'] === 'ADMIN'): ?>
+                <a href="usuarios.php">👤 Usuarios (Admin)</a>
+            <?php endif; ?>
             <a href="reportes.php">📊 Reportes</a>
         </nav>
     </aside>
 
     <main>
-        <h1>Gestión de Categorías</h1>
+        <h1>Gestión de Categorías (CRUD Completo)</h1>
 
         <?php if (!empty($mensaje)): ?>
             <div class="alert"><?php echo htmlspecialchars($mensaje); ?></div>
         <?php endif; ?>
 
         <div class="card">
-            <h3>Registrar Nueva Categoría</h3>
+            <h3><?php echo $editando ? 'Editar Categoría' : 'Registrar Nueva Categoría'; ?></h3>
             <form action="categorias.php" method="POST">
+                <input type="hidden" name="es_actualizacion" value="<?php echo $editando ? '1' : '0'; ?>">
+                <input type="hidden" name="id_categoria" value="<?php echo htmlspecialchars($cat_edit['id_categoria']); ?>">
                 <div class="form-group">
                     <label>Nombre de la Categoría:</label>
-                    <input type="text" name="nombre" required placeholder="Ej. Programación">
+                    <input type="text" name="nombre" required placeholder="Ej. Programación" value="<?php echo htmlspecialchars($cat_edit['nombre']); ?>">
                 </div>
                 <div class="form-group">
                     <label>Descripción:</label>
-                    <textarea name="descripcion" placeholder="Breve descripción de la categoría..."></textarea>
+                    <textarea name="descripcion" placeholder="Breve descripción..."><?php echo htmlspecialchars($cat_edit['descripcion']); ?></textarea>
                 </div>
-                <button type="submit" class="btn">Guardar Categoría</button>
+                <button type="submit" class="btn"><?php echo $editando ? 'Actualizar Categoría' : 'Guardar Categoría'; ?></button>
+                <?php if ($editando): ?>
+                    <a href="categorias.php" class="btn-cancel">Cancelar</a>
+                <?php endif; ?>
             </form>
         </div>
 
@@ -125,20 +182,25 @@ $categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
                         <th>ID</th>
                         <th>Nombre</th>
                         <th>Descripción</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (!empty($categorias)): ?>
-                        <?php foreach ($categorias as $cat): ?>
+                        <?php foreach ($categorias as$cat): ?>
                             <tr>
                                 <td><strong>#<?php echo htmlspecialchars($cat['id_categoria']); ?></strong></td>
                                 <td><?php echo htmlspecialchars($cat['nombre']); ?></td>
                                 <td><?php echo htmlspecialchars($cat['descripcion']); ?></td>
+                                <td>
+                                    <a href="categorias.php?editar=<?php echo $cat['id_categoria']; ?>" class="action-link edit-link">✏️ Editar</a>
+                                    <a href="categorias.php?eliminar=<?php echo $cat['id_categoria']; ?>" class="action-link delete-link" onclick="return confirm('¿Estás seguro de eliminar esta categoría?');">🗑️ Eliminar</a>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="3" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                            <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px;">
                                 No hay categorías registradas todavía.
                             </td>
                         </tr>

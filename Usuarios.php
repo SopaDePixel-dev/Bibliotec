@@ -1,7 +1,7 @@
 <?php
 session_start();
 
-// Validar que haya sesión y que estrictamente sea ADMIN
+// Validar acceso exclusivo para ADMIN
 if (!isset($_SESSION['id_usuario']) || $_SESSION['rol'] !== 'ADMIN') {
     header("Location: index.php");
     exit;
@@ -10,32 +10,86 @@ if (!isset($_SESSION['id_usuario']) || $_SESSION['rol'] !== 'ADMIN') {
 include 'conexion.php';
 
 $mensaje = "";
+$editando = false;
+$usr_edit = [
+    'id_usuario' => '',
+    'nombre' => '',
+    'nombreUsuario' => '',
+    'rol' => 'BIBLIOTECARIO'
+];
 
+// --- 1. ELIMINAR USUARIO ---
+if (isset($_GET['eliminar'])) {
+    $id = intval($_GET['eliminar']);
+    if ($id != $_SESSION['id_usuario']) {
+        try {
+            $stmt = $pdo->prepare("DELETE FROM usuario WHERE id_usuario = :id");
+            $stmt->execute([':id' => $id]);
+            header("Location: usuarios.php");
+            exit;
+        } catch (PDOException $e) {
+            $mensaje = "Error al eliminar el usuario.";
+        }
+    } else {
+        $mensaje = "No puedes eliminar tu propia sesión activa.";
+    }
+}
+
+// --- 2. CARGAR DATOS PARA EDITAR ---
+if (isset($_GET['editar'])) {
+    $id = intval($_GET['editar']);
+    $stmt = $pdo->prepare("SELECT id_usuario, nombre, nombreUsuario, rol FROM usuario WHERE id_usuario = :id");
+    $stmt->execute([':id' => $id]);
+    $resultado = $stmt->fetch();
+    if ($resultado) {
+        $editando = true;
+        $usr_edit = $resultado;
+    }
+}
+
+// --- 3. GUARDAR (CREAR O ACTUALIZAR) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $id_usuario    = intval($_POST['id_usuario'] ?? 0);
     $nombre        = trim($_POST['nombre']);
     $nombreUsuario = trim($_POST['nombreUsuario']);
     $contrasena    = trim($_POST['contrasena']);
     $rol           = $_POST['rol'];
+    $es_actualizacion = $_POST['es_actualizacion'] === '1';
 
-    if (!empty($nombre) && !empty($nombreUsuario) && !empty($contrasena) && !empty($rol)) {
+    if (!empty($nombre) && !empty($nombreUsuario) && !empty($rol)) {
         try {
-            $passwordHash = password_hash($contrasena, PASSWORD_DEFAULT);
-
-            $sql = "INSERT INTO usuario (nombre, nombreUsuario, contrasena, rol) 
-                    VALUES (:nombre, :nusuario, :pass, :rol)";
-            $stmt = $pdo->prepare($sql);
-            $stmt->execute([
-                ':nombre'   => $nombre,
-                ':nusuario' => $nombreUsuario,
-                ':pass'     => $passwordHash,
-                ':rol'      => $rol
-            ]);
-            $mensaje = "¡Usuario registrado con éxito!";
+            if ($es_actualizacion && $id_usuario > 0) {
+                // Actualizar (Update)
+                if (!empty($contrasena)) {
+                    $passwordHash = password_hash($contrasena, PASSWORD_DEFAULT);
+                    $sql = "UPDATE usuario SET nombre = :nombre, nombreUsuario = :nusuario, contrasena = :pass, rol = :rol WHERE id_usuario = :id";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute([':nombre' => $nombre, ':nusuario' => $nombreUsuario, ':pass' => $passwordHash, ':rol' => $rol, ':id' => $id_usuario]);
+                } else {
+                    $sql = "UPDATE usuario SET nombre = :nombre, nombreUsuario = :nusuario, rol = :rol WHERE id_usuario = :id";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute([':nombre' => $nombre, ':nusuario' => $nombreUsuario, ':rol' => $rol, ':id' => $id_usuario]);
+                }
+                $mensaje = "¡Usuario actualizado con éxito!";
+            } else {
+                // Insertar (Create)
+                if (!empty($contrasena)) {
+                    $passwordHash = password_hash($contrasena, PASSWORD_DEFAULT);
+                    $sql = "INSERT INTO usuario (nombre, nombreUsuario, contrasena, rol) VALUES (:nombre, :nusuario, :pass, :rol)";
+                    $stmt = $pdo->prepare($sql);
+                    $stmt->execute([':nombre' => $nombre, ':nusuario' => $nombreUsuario, ':pass' => $passwordHash, ':rol' => $rol]);
+                    $mensaje = "¡Usuario registrado con éxito!";
+                } else {
+                    $mensaje = "La contraseña es obligatoria para nuevos usuarios.";
+                }
+            }
+            $editando = false;
+            $usr_edit = ['id_usuario' => '', 'nombre' => '', 'nombreUsuario' => '', 'rol' => 'BIBLIOTECARIO'];
         } catch (PDOException $e) {
             $mensaje = "Error: El nombre de usuario ya está registrado.";
         }
     } else {
-        $mensaje = "Por favor, completa todos los campos del formulario.";
+        $mensaje = "Por favor, completa los campos obligatorios.";
     }
 }
 
@@ -81,6 +135,8 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
 
         .btn { background-color: var(--primary); color: white; padding: 10px 20px; border: none; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
         .btn:hover { background-color: var(--primary-dark); }
+        .btn-cancel { background-color: #64748b; margin-left: 10px; text-decoration: none; display: inline-block; padding: 10px 20px; border-radius: 6px; color: white; font-weight: 600; font-size: 0.9rem; }
+        .btn-cancel:hover { background-color: #475569; }
 
         .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; font-size: 0.9rem; background-color: #d1fae5; color: #065f46; }
 
@@ -88,6 +144,12 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
         th, td { padding: 12px 16px; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
         th { background-color: #f8fafc; font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); }
         tr:hover td { background-color: #f8fafc; }
+
+        .action-link { text-decoration: none; font-weight: 600; font-size: 0.85rem; margin-right: 10px; }
+        .edit-link { color: #0284c7; }
+        .edit-link:hover { text-decoration: underline; }
+        .delete-link { color: #dc2626; }
+        .delete-link:hover { text-decoration: underline; }
     </style>
 </head>
 <body>
@@ -110,38 +172,42 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
     </aside>
 
     <main>
-        <h1>Gestión de Usuarios del Sistema</h1>
+        <h1>Gestión de Usuarios (CRUD Completo)</h1>
 
         <?php if (!empty($mensaje)): ?>
             <div class="alert"><?php echo htmlspecialchars($mensaje); ?></div>
         <?php endif; ?>
 
         <div class="card">
-            <h3>Registrar Nuevo Usuario Administrador / Bibliotecario</h3>
+            <h3><?php echo $editando ? 'Editar Usuario' : 'Registrar Nuevo Usuario'; ?></h3>
             <form action="usuarios.php" method="POST">
+                <input type="hidden" name="es_actualizacion" value="<?php echo $editando ? '1' : '0'; ?>">
+                <input type="hidden" name="id_usuario" value="<?php echo htmlspecialchars($usr_edit['id_usuario']); ?>">
                 <div class="form-grid">
                     <div class="form-group">
                         <label>Nombre Completo:</label>
-                        <input type="text" name="nombre" required placeholder="Nombre del encargado">
+                        <input type="text" name="nombre" required placeholder="Nombre" value="<?php echo htmlspecialchars($usr_edit['nombre']); ?>">
                     </div>
                     <div class="form-group">
-                        <label>Nombre de Usuario (Login):</label>
-                        <input type="text" name="nombreUsuario" required placeholder="Ej. jperez">
+                        <label>Usuario (Login):</label>
+                        <input type="text" name="nombreUsuario" required placeholder="Usuario" value="<?php echo htmlspecialchars($usr_edit['nombreUsuario']); ?>">
                     </div>
                     <div class="form-group">
                         <label>Contraseña:</label>
-                        <input type="password" name="contrasena" required placeholder="********">
+                        <input type="password" name="contrasena" placeholder="<?php echo $editando ? 'Dejar en blanco para no cambiar' : '********'; ?>">
                     </div>
                     <div class="form-group">
-                        <label>Rol del Sistema:</label>
+                        <label>Rol:</label>
                         <select name="rol" required>
-                            <option value="">Selecciona un rol</option>
-                            <option value="ADMIN">ADMIN (Control Total)</option>
-                            <option value="BIBLIOTECARIO">BIBLIOTECARIO</option>
+                            <option value="ADMIN" <?php echo ($usr_edit['rol'] === 'ADMIN') ? 'selected' : ''; ?>>ADMIN</option>
+                            <option value="BIBLIOTECARIO" <?php echo ($usr_edit['rol'] === 'BIBLIOTECARIO') ? 'selected' : ''; ?>>BIBLIOTECARIO</option>
                         </select>
                     </div>
                 </div>
-                <button type="submit" class="btn">Guardar Usuario</button>
+                <button type="submit" class="btn"><?php echo $editando ? 'Actualizar Usuario' : 'Guardar Usuario'; ?></button>
+                <?php if ($editando): ?>
+                    <a href="usuarios.php" class="btn-cancel">Cancelar</a>
+                <?php endif; ?>
             </form>
         </div>
 
@@ -156,6 +222,7 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
                         <th>Nombre</th>
                         <th>Usuario</th>
                         <th>Rol</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -166,11 +233,17 @@ $usuarios = $pdo->query("SELECT id_usuario, nombre, nombreUsuario, rol FROM usua
                                 <td><?php echo htmlspecialchars($usr['nombre']); ?></td>
                                 <td><?php echo htmlspecialchars($usr['nombreUsuario']); ?></td>
                                 <td><span style="background: #e0f2fe; color: #0369a1; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;"><?php echo htmlspecialchars($usr['rol']); ?></span></td>
+                                <td>
+                                    <a href="usuarios.php?editar=<?php echo $usr['id_usuario']; ?>" class="action-link edit-link">✏️ Editar</a>
+                                    <?php if ($usr['id_usuario'] != $_SESSION['id_usuario']): ?>
+                                        <a href="usuarios.php?eliminar=<?php echo $usr['id_usuario']; ?>" class="action-link delete-link" onclick="return confirm('¿Estás seguro de eliminar este usuario?');">🗑️ Eliminar</a>
+                                    <?php endif; ?>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php else: ?>
                         <tr>
-                            <td colspan="4" style="text-align: center; color: var(--text-muted); padding: 30px;">
+                            <td colspan="5" style="text-align: center; color: var(--text-muted); padding: 30px;">
                                 No hay usuarios registrados todavía.
                             </td>
                         </tr>
