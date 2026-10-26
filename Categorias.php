@@ -13,36 +13,41 @@ $cat_edit = [
 if (isset($_GET['eliminar'])) {
     $id = intval($_GET['eliminar']);
     try {
-        $stmt =$pdo->prepare("DELETE FROM categoria WHERE id_categoria = :id");
-        $stmt->execute([':id' =>$id]);
+        $stmt = $pdo->prepare("DELETE FROM categoria WHERE id_categoria = :id");
+        $stmt->execute([':id' => $id]);
         header("Location: categorias.php");
         exit;
-    } catch (PDOException $e) {$mensaje = "Error: No se puede eliminar la categoría porque tiene libros asociados.";
+    } catch (PDOException $e) {
+        $mensaje = "Error: No se puede eliminar la categoría porque tiene libros asociados.";
     }
 }
 
 // --- 2. CARGAR DATOS PARA EDITAR ---
 if (isset($_GET['editar'])) {
     $id = intval($_GET['editar']);
-    $stmt =$pdo->prepare("SELECT * FROM categoria WHERE id_categoria = :id");
-    $stmt->execute([':id' =>$id]);
-    $resultado =$stmt->fetch();
-    if ($resultado) {$editando = true;
-        $cat_edit =$resultado;
+    $stmt = $pdo->prepare("SELECT * FROM categoria WHERE id_categoria = :id");
+    $stmt->execute([':id' => $id]);
+    $resultado = $stmt->fetch();
+    if ($resultado) {
+        $editando = true;
+        $cat_edit = $resultado;
     }
 }
 
 // --- 3. GUARDAR (CREAR O ACTUALIZAR) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $id_categoria = intval($_POST['id_categoria'] ?? 0);
-    $nombre       = trim($_POST['nombre']);
-    $descripcion  = trim($_POST['descripcion']);
-    $es_actualizacion =$_POST['es_actualizacion'] === '1';
+    $id_categoria     = intval($_POST['id_categoria'] ?? 0);
+    $nombre           = trim($_POST['nombre']);
+    $descripcion      = trim($_POST['descripcion']);
+    $es_actualizacion = isset($_POST['es_actualizacion']) && $_POST['es_actualizacion'] === '1';
 
     if (!empty($nombre)) {
         try {
-            if ($es_actualizacion && $id_categoria > 0) { // Actualizar (Update)$sql = "UPDATE categoria SET nombre = :nombre, descripcion = :descripcion WHERE id_categoria = :id";
-                $stmt =$pdo->prepare($sql);$stmt->execute([
+            if ($es_actualizacion && $id_categoria > 0) {
+                // Actualizar (Update)
+                $sql = "UPDATE categoria SET nombre = :nombre, descripcion = :descripcion WHERE id_categoria = :id";
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([
                     ':nombre'      => $nombre,
                     ':descripcion' => $descripcion,
                     ':id'          => $id_categoria
@@ -51,7 +56,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 // Insertar (Create)
                 $sql = "INSERT INTO categoria (nombre, descripcion) VALUES (:nombre, :descripcion)";
-                $stmt =$pdo->prepare($sql);$stmt->execute([
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute([
                     ':nombre'      => $nombre,
                     ':descripcion' => $descripcion
                 ]);
@@ -59,14 +65,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $editando = false;
             $cat_edit = ['id_categoria' => '', 'nombre' => '', 'descripcion' => ''];
-        } catch (PDOException $e) {$mensaje = "Error al guardar la categoría.";
+        } catch (PDOException $e) {
+            $mensaje = "Error al guardar la categoría.";
         }
     } else {
         $mensaje = "El nombre de la categoría es obligatorio.";
     }
 }
 
-$categorias =$pdo->query("SELECT * FROM categoria")->fetchAll();
+$categorias = $pdo->query("SELECT * FROM categoria")->fetchAll();
 ?>
 
 <!DOCTYPE html>
@@ -138,7 +145,7 @@ $categorias =$pdo->query("SELECT * FROM categoria")->fetchAll();
             <a href="estudiantes.php">🎓 Estudiantes</a>
             <a href="libros.php">📖 Libros</a>
             <a href="categorias.php" class="active">🏷️ Categorías</a>
-            <?php if (isset($_SESSION['rol']) &&$_SESSION['rol'] === 'ADMIN'): ?>
+            <?php if (isset($_SESSION['rol']) && $_SESSION['rol'] === 'ADMIN'): ?>
                 <a href="usuarios.php">👤 Usuarios (Admin)</a>
             <?php endif; ?>
             <a href="reportes.php">📊 Reportes</a>
@@ -187,7 +194,7 @@ $categorias =$pdo->query("SELECT * FROM categoria")->fetchAll();
                 </thead>
                 <tbody>
                     <?php if (!empty($categorias)): ?>
-                        <?php foreach ($categorias as$cat): ?>
+                        <?php foreach ($categorias as $cat): ?>
                             <tr>
                                 <td><strong>#<?php echo htmlspecialchars($cat['id_categoria']); ?></strong></td>
                                 <td><?php echo htmlspecialchars($cat['nombre']); ?></td>

@@ -1,36 +1,9 @@
-<?php
-session_start();
-
-if (!isset($_SESSION['id_usuario'])) {
-    header("Location: login.php");
-    exit;
-}
-
-include 'conexion.php';
-
-try {
-    $totalLibros = $pdo->query("SELECT COUNT(*) FROM libros")->fetchColumn();
-    $totalEjemplares = $pdo->query("SELECT SUM(stock) FROM libros")->fetchColumn() ?: 0;
-    $prestamosActivos = $pdo->query("SELECT COUNT(*) FROM prestamo WHERE estado = 'Activo'")->fetchColumn();
-    $totalDevoluciones = $pdo->query("SELECT COUNT(*) FROM devolucion")->fetchColumn();
-    $totalEstudiantes = $pdo->query("SELECT COUNT(*) FROM estudiante")->fetchColumn();
-    $totalCategorias = $pdo->query("SELECT COUNT(*) FROM categoria")->fetchColumn();
-} catch (PDOException $e) {
-    $totalLibros = 0;
-    $totalEjemplares = 0;
-    $prestamosActivos = 0;
-    $totalDevoluciones = 0;
-    $totalEstudiantes = 0;
-    $totalCategorias = 0;
-}
-?>
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BiblioTec - Panel Principal</title>
+    <title>BiblioTec - Bienvenido</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -44,109 +17,51 @@ try {
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; }
-        body { background-color: var(--bg-color); color: var(--text-main); display: flex; min-height: 100vh; }
+        body { background-color: var(--bg-color); color: var(--text-main); display: flex; justify-content: center; align-items: center; min-height: 100vh; }
 
-        aside { width: 260px; background-color: var(--primary); color: white; display: flex; flex-direction: column; padding: 20px; }
-        aside h2 { font-size: 1.4rem; margin-bottom: 5px; }
-        aside p { font-size: 0.8rem; opacity: 0.8; margin-bottom: 30px; }
-        aside nav a { display: block; padding: 12px 15px; color: white; text-decoration: none; border-radius: 6px; font-weight: 500; margin-bottom: 6px; transition: background 0.2s; }
-        aside nav a:hover, aside nav a.active { background-color: rgba(255, 255, 255, 0.15); }
+        .container { width: 100%; max-width: 750px; padding: 20px; text-align: center; }
+        h1 { font-size: 2.4rem; color: var(--primary); margin-bottom: 8px; font-weight: 700; }
+        p.subtitle { color: var(--text-muted); margin-bottom: 40px; font-size: 1rem; }
 
-        main { flex: 1; display: flex; flex-direction: column; }
-
-        header { background-color: #1d4ed8; color: white; padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        header .materia { font-size: 0.9rem; font-weight: 600; letter-spacing: 0.5px; }
-        header .user-info { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
-        header .user-badge { background: rgba(255,255,255,0.2); padding: 6px 12px; border-radius: 20px; }
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
         
-        .btn-logout { background-color: #dc2626; color: white; padding: 6px 12px; border-radius: 6px; text-decoration: none; font-size: 0.8rem; font-weight: 600; transition: background 0.2s; }
-        .btn-logout:hover { background-color: #b91c1c; }
+        .card { background: var(--card-bg); padding: 35px 25px; border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 4px 6px rgba(0,0,0,0.05); transition: transform 0.2s, box-shadow 0.2s; text-decoration: none; color: inherit; display: block; text-align: center; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px rgba(0,0,0,0.08); border-color: var(--primary); }
 
-        .content-body { padding: 30px; overflow-y: auto; }
-        .welcome-title { font-size: 1.6rem; font-weight: 700; margin-bottom: 20px; }
+        .card h3 { font-size: 1.4rem; color: var(--primary); margin-bottom: 10px; }
+        .card p { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 25px; line-height: 1.4; }
 
-        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 35px; }
-        .metric-card { background: var(--card-bg); padding: 20px; border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-        .metric-card h3 { font-size: 2.2rem; font-weight: 700; color: var(--primary); margin-bottom: 5px; }
-        .metric-card p { font-size: 0.9rem; color: var(--text-muted); font-weight: 500; }
-
-        .quick-actions { background: var(--card-bg); padding: 20px; border-radius: 10px; border: 1px solid var(--border-color); }
-        .quick-actions h4 { margin-bottom: 15px; font-size: 1.1rem; }
-        .btn-group { display: flex; flex-wrap: wrap; gap: 10px; }
-        .btn { background-color: var(--primary); color: white; padding: 10px 16px; border-radius: 6px; text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: background 0.2s; }
+        .btn { background-color: var(--primary); color: white; padding: 10px 20px; border-radius: 6px; font-weight: 600; font-size: 0.9rem; display: inline-block; transition: background 0.2s; }
         .btn:hover { background-color: var(--primary-dark); }
+
+        .card.student .btn { background-color: #047857; }
+        .card.student .btn:hover { background-color: #065f46; }
+        .card.student h3 { color: #047857; }
+        .card.student:hover { border-color: #047857; }
     </style>
 </head>
 <body>
 
-    <aside>
-        <h2>BiblioTec</h2>
-        <p>Sistema de Biblioteca</p>
-        <nav>
-            <a href="index.php" class="active">🏠 Principal</a>
-            <a href="prestamos.php">📅 Préstamos</a>
-            <a href="devoluciones.php">🔄 Devoluciones</a>
-            <a href="estudiantes.php">🎓 Estudiantes</a>
-            <a href="libros.php">📖 Libros</a>
-            <a href="categorias.php">🏷️ Categorías</a>
-            <a href="usuarios.php">👤 Usuarios (Admin)</a>
-            <a href="reportes.php">📊 Reportes</a>
-        </nav>
-    </aside>
+    <div class="container">
+        <h1>📚 BiblioTec</h1>
+        <p class="subtitle">Sistema Integral de Gestión Bibliotecaria</p>
 
-    <main>
-        <header>
-            <span class="materia">TÓPICOS AVANZADOS DE PROGRAMACIÓN</span>
-            <div class="user-info">
-                <span class="user-badge">
-                    Sesión: <strong><?php echo htmlspecialchars($_SESSION['nombre']); ?></strong> 
-                    (Rol: <strong><?php echo htmlspecialchars($_SESSION['rol']); ?></strong>)
-                </span>
-                <a href="logout.php" class="btn-logout">Cerrar Sesión</a>
-            </div>
-        </header>
+        <div class="cards-grid">
+            <!-- Acceso Personal / Admin -->
+            <a href="login.php" class="card">
+                <h3>👨‍💼 Personal y Administración</h3>
+                <p>Acceso exclusivo para administradores y bibliotecarios del sistema escolar.</p>
+                <span class="btn">Ingresar como Personal</span>
+            </a>
 
-        <div class="content-body">
-            <h1 class="welcome-title">Bienvenido, <?php echo htmlspecialchars($_SESSION['nombre']); ?></h1>
-
-            <div class="metrics-grid">
-                <div class="metric-card">
-                    <h3><?php echo $totalLibros; ?></h3>
-                    <p>Libros registrados</p>
-                </div>
-                <div class="metric-card">
-                    <h3><?php echo $totalEjemplares; ?></h3>
-                    <p>Ejemplares (Stock total)</p>
-                </div>
-                <div class="metric-card">
-                    <h3><?php echo $prestamosActivos; ?></h3>
-                    <p>Préstamos activos</p>
-                </div>
-                <div class="metric-card">
-                    <h3><?php echo $totalDevoluciones; ?></h3>
-                    <p>Devoluciones registradas</p>
-                </div>
-                <div class="metric-card">
-                    <h3><?php echo $totalEstudiantes; ?></h3>
-                    <p>Estudiantes activos</p>
-                </div>
-                <div class="metric-card">
-                    <h3><?php echo $totalCategorias; ?></h3>
-                    <p>Categorías</p>
-                </div>
-            </div>
-
-            <div class="quick-actions">
-                <h4>Accesos Rápidos</h4>
-                <div class="btn-group">
-                    <a href="prestamos.php" class="btn">+ Ir a Préstamos</a>
-                    <a href="devoluciones.php" class="btn">+ Ir a Devoluciones</a>
-                    <a href="estudiantes.php" class="btn">+ Registrar Estudiante</a>
-                    <a href="libros.php" class="btn">+ Registrar Libro</a>
-                </div>
-            </div>
+            <!-- Acceso Estudiantes -->
+            <a href="login_estudiante.php" class="card student">
+                <h3>🎓 Portal de Estudiantes</h3>
+                <p>Consulta tu historial, préstamos activos y el acervo de libros disponible.</p>
+                <span class="btn">Ingresar como Alumno</span>
+            </a>
         </div>
-    </main>
+    </div>
 
 </body>
 </html>
