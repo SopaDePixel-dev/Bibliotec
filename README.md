@@ -24,6 +24,13 @@ Sistema web desarrollado en **PHP 8** y **MySQL** para la gestión integral de u
 * **Control de Versiones**: Git y GitHub.
 
 ---
+---
+
+## 📂 Estructura General del Proyecto
+
+* `/base-de-datos/` - Contiene el script SQL con el esquema inicial de la base de datos y tablas relacionales.
+* `*.php` - Archivos independientes basados en programación modular para cada vista, lógica de control y validación de sesiones.
+* 
 
 ## ⚙️ Requisitos e Instalación Local (XAMPP)
 
